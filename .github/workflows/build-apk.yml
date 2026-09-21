@@ -1,0 +1,142 @@
+name: MetinCep APK Oluştur
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+env:
+  # Paket sürüm aralıkları bu Flutter sürümüne göre doğrulandı. Değiştirmeniz önerilmez.
+  FLUTTER_VERSION: '3.35.7'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Kodu al
+        uses: actions/checkout@v4
+
+      - name: Java 17 kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Flutter kur
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Flutter bilgisi
+        run: flutter --version
+
+      - name: Android proje dosyalarını hazırla
+        run: bash tool/setup_android.sh
+
+      # Kalite kontrol adımları hata verse bile APK üretilebilsin diye
+      # continue-on-error kullanılır; sonuçlar en sonda toplanır ve
+      # herhangi biri başarısızsa iş akışı KIRMIZI olur (sessizce geçmez).
+
+      - name: Temizlik (flutter clean)
+        id: clean
+        run: flutter clean
+        continue-on-error: true
+
+      - name: Paketleri indir (flutter pub get)
+        id: pubget
+        run: flutter pub get
+        continue-on-error: true
+
+      - name: 1/4 Kod analizi (flutter analyze)
+        id: analyze
+        run: flutter analyze
+        continue-on-error: true
+
+      - name: 2/4 Otomatik testler (flutter test)
+        id: test
+        run: flutter test --reporter expanded
+        continue-on-error: true
+
+      - name: 3/4 Release APK oluştur
+        id: release
+        run: flutter build apk --release
+        continue-on-error: true
+
+      - name: 4/4 Release güvenlik doğrulaması (Mock Pro kontrolü)
+        id: guards
+        run: bash tool/verify_release_guards.sh build/app/outputs/flutter-apk/app-release.apk
+        continue-on-error: true
+
+      - name: Debug APK oluştur (release başarısızsa yedek)
+        id: debugapk
+        if: steps.release.outcome != 'success'
+        run: flutter build apk --debug
+        continue-on-error: true
+
+      - name: APK boyutlarını göster
+        if: always()
+        run: ls -lh build/app/outputs/flutter-apk/*.apk || echo "APK üretilmedi"
+
+      - name: APK dosyalarını yükle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MetinCep-APK
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: warn
+
+      - name: PASS/FAIL raporu
+        if: always()
+        env:
+          R_CLEAN: ${{ steps.clean.outcome }}
+          R_PUBGET: ${{ steps.pubget.outcome }}
+          R_ANALYZE: ${{ steps.analyze.outcome }}
+          R_TEST: ${{ steps.test.outcome }}
+          R_RELEASE: ${{ steps.release.outcome }}
+          R_GUARDS: ${{ steps.guards.outcome }}
+        run: |
+          mark() { if [ "$1" = "success" ]; then echo "PASS"; else echo "FAIL"; fi; }
+          {
+            echo "## MetinCep — Kalite Kontrol Raporu"
+            echo
+            echo "| Adım | Sonuç |"
+            echo "|---|---|"
+            echo "| flutter clean | $(mark "$R_CLEAN") |"
+            echo "| flutter pub get | $(mark "$R_PUBGET") |"
+            echo "| flutter analyze | $(mark "$R_ANALYZE") |"
+            echo "| flutter test | $(mark "$R_TEST") |"
+            echo "| flutter build apk --release | $(mark "$R_RELEASE") |"
+            echo "| Release güvenlik doğrulaması | $(mark "$R_GUARDS") |"
+            echo
+            if [ "$R_RELEASE" = "success" ]; then
+              echo "Release APK: **Artifacts → MetinCep-APK → app-release.apk**"
+            else
+              echo "Release APK üretilemedi. Varsa yedek debug APK yüklendi."
+            fi
+            echo
+            echo "Cihaz testleri (özellikle Free limitleri ve release Mock Pro kontrolü)"
+            echo "otomatik yapılamaz: \`docs/TEST_PLANI.md\` bölüm P ve R."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "=== SONUÇ ==="
+          echo "flutter clean                : $(mark "$R_CLEAN")"
+          echo "flutter pub get              : $(mark "$R_PUBGET")"
+          echo "flutter analyze              : $(mark "$R_ANALYZE")"
+          echo "flutter test                 : $(mark "$R_TEST")"
+          echo "flutter build apk --release  : $(mark "$R_RELEASE")"
+          echo "release güvenlik doğrulaması : $(mark "$R_GUARDS")"
+
+          if [ "$R_CLEAN" != "success" ] || [ "$R_PUBGET" != "success" ] || \
+             [ "$R_ANALYZE" != "success" ] || \
+             [ "$R_TEST" != "success" ] || [ "$R_RELEASE" != "success" ] || \
+             [ "$R_GUARDS" != "success" ]; then
+            echo "Bir veya daha fazla adım başarısız. Yukarıdaki adım günlüklerine bakın."
+            exit 1
+          fi
+          echo "Tüm kalite kontrolleri geçti."
