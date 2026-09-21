@@ -9,11 +9,10 @@ import 'package:metincep/services/feature_access_service.dart';
 import 'package:metincep/services/purchase_service.dart';
 import 'package:metincep/services/usage_tracker.dart';
 
+/// Her zaman hazır reklam sağlayıcısı. "Hazır değil" durumu NoOpAdProvider testiyle kapsanır.
 class _FakeAdProvider implements AdProvider {
-  _FakeAdProvider({this.isReady = true});
-
   @override
-  final bool isReady;
+  bool get isReady => true;
 
   int interstitialCalls = 0;
   final Widget banner = const SizedBox(key: ValueKey('fake-banner'), height: 50);
