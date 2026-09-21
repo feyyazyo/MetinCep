@@ -118,8 +118,15 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
   }
 
   /// PDF, geçerli planın sayfa sınırını aşıyorsa kullanıcıya sorar.
+  ///
+  /// Kullanıcı Pro ekranından Pro olmadan dönerse soru yeniden sorulur. Döngünün
+  /// her turu, bir önceki turdaki `await ProScreen.open` sonrası ekranın hâlâ
+  /// açık olduğunu kontrol ederek başlar (döngü koşulundaki kontrol yeterli sayılmaz).
   Future<PageLimitDecision> _resolvePageLimit(int pageCount, int maxPages) async {
-    while (mounted) {
+    while (true) {
+      if (!mounted) {
+        return PageLimitDecision.cancel;
+      }
       final choice = await showLimitDialog(
         context,
         LimitPrompt.pdfPages(pageCount: pageCount, maxPages: maxPages),
@@ -140,7 +147,6 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
           return PageLimitDecision.cancel;
       }
     }
-    return PageLimitDecision.cancel;
   }
 
   void _handleProgress(ExtractionProgress progress) {
