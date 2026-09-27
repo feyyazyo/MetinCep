@@ -38,45 +38,41 @@ jobs:
       - name: Android proje dosyalarını hazırla
         run: bash tool/setup_android.sh
 
-      # Kalite kontrol adımları hata verse bile APK üretilebilsin diye
-      # continue-on-error kullanılır; sonuçlar en sonda toplanır ve
-      # herhangi biri başarısızsa iş akışı KIRMIZI olur (sessizce geçmez).
+      # KALİTE KAPILARI
+      # continue-on-error KULLANILMAZ: bir adım başarısız olursa iş akışı orada
+      # durur ve KIRMIZI olur. Sonraki adımlar "atlandı" görünür; hiçbir hata
+      # gizlenmez ve başarısız testin üzerine APK üretilmez.
 
       - name: Temizlik (flutter clean)
         id: clean
         run: flutter clean
-        continue-on-error: true
 
       - name: Paketleri indir (flutter pub get)
         id: pubget
         run: flutter pub get
-        continue-on-error: true
 
       - name: 1/4 Kod analizi (flutter analyze)
         id: analyze
         run: flutter analyze
-        continue-on-error: true
 
       - name: 2/4 Otomatik testler (flutter test)
         id: test
         run: flutter test --reporter expanded
-        continue-on-error: true
 
       - name: 3/4 Release APK oluştur
         id: release
         run: flutter build apk --release
-        continue-on-error: true
 
       - name: 4/4 Release güvenlik doğrulaması (Mock Pro kontrolü)
         id: guards
         run: bash tool/verify_release_guards.sh build/app/outputs/flutter-apk/app-release.apk
-        continue-on-error: true
 
-      - name: Debug APK oluştur (release başarısızsa yedek)
+      # Aşağıdaki adımlar rapor/teşhis içindir; hata gizlemezler.
+
+      - name: Debug APK oluştur (yalnızca release derlemesi kırıldıysa)
         id: debugapk
-        if: steps.release.outcome != 'success'
+        if: failure() && steps.release.outcome == 'failure'
         run: flutter build apk --debug
-        continue-on-error: true
 
       - name: APK boyutlarını göster
         if: always()
@@ -102,7 +98,14 @@ jobs:
           R_RELEASE: ${{ steps.release.outcome }}
           R_GUARDS: ${{ steps.guards.outcome }}
         run: |
-          mark() { if [ "$1" = "success" ]; then echo "PASS"; else echo "FAIL"; fi; }
+          # success → PASS, failure → FAIL, çalışmadıysa (önceki adım kırıldı) → ATLANDI
+          mark() {
+            case "$1" in
+              success) echo "PASS" ;;
+              failure) echo "FAIL" ;;
+              *)       echo "ATLANDI" ;;
+            esac
+          }
           {
             echo "## MetinCep — Kalite Kontrol Raporu"
             echo
@@ -118,11 +121,13 @@ jobs:
             if [ "$R_RELEASE" = "success" ]; then
               echo "Release APK: **Artifacts → MetinCep-APK → app-release.apk**"
             else
-              echo "Release APK üretilemedi. Varsa yedek debug APK yüklendi."
+              echo "Release APK üretilemedi (veya önceki bir kapı kırıldığı için sıra gelmedi)."
+              echo "ATLANDI yazan adımlar çalışmadı; ilk FAIL adımının günlüğüne bakın."
             fi
             echo
-            echo "Cihaz testleri (özellikle Free limitleri ve release Mock Pro kontrolü)"
-            echo "otomatik yapılamaz: \`docs/TEST_PLANI.md\` bölüm P ve R."
+            echo "Cihaz testleri (özellikle el yazısı, tablo, PDF çıktısı, Free limitleri ve"
+            echo "release Mock Pro kontrolü) otomatik yapılamaz: \`docs/TEST_PLANI.md\`"
+            echo "bölüm H, T, O, P ve R."
           } >> "$GITHUB_STEP_SUMMARY"
 
           echo "=== SONUÇ ==="
@@ -137,7 +142,7 @@ jobs:
              [ "$R_ANALYZE" != "success" ] || \
              [ "$R_TEST" != "success" ] || [ "$R_RELEASE" != "success" ] || \
              [ "$R_GUARDS" != "success" ]; then
-            echo "Bir veya daha fazla adım başarısız. Yukarıdaki adım günlüklerine bakın."
+            echo "Bir veya daha fazla adım başarısız / atlandı. Yukarıdaki adım günlüklerine bakın."
             exit 1
           fi
           echo "Tüm kalite kontrolleri geçti."
