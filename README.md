@@ -522,6 +522,7 @@ Aynı adımlar GitHub Actions'ta her derlemede otomatik çalışır ve iş akı�
 | `test/ocr/table_detector_test.dart` | 2/3/5 kolonlu tablolar, eksik hücre, Türkçe + tarih + para hücreleri, paragraf ve dağınık yerleşimde tablo üretilmemesi, hizalı metne dönüşüm |
 | `test/ocr/ocr_pipeline_test.dart` | Ham/düzeltilmiş metnin ayrı tutulması, tablo hücrelerinin metinle tutarlılığı, düşük güvende ham metnin korunması |
 | `test/ocr/image_preprocessor_test.dart` | Eğiklik tahmini (düz, +3°, −2°), gri tonlama, büyük görüntünün küçültülmesi, bozuk dosyada çökmeme, basılı modda dokunulmaması |
+| `test/ocr/image_decoding_test.dart` | Bozuk, boş, olmayan ve fotoğraf olmayan dosyalarda güvenli çözme: istisna atılmaz, `null` döner (gerileme testi) |
 | `test/pdf/pdf_export_service_test.dart` | Geçerli PDF üretimi, gömülü Türkçe yazı tipi, uzun metin/tablonun sayfalara bölünmesi, geniş tabloda yatay sayfa, dikey/yatay fotoğraf, çoklu fotoğraf sayfa sayısı, boş içerikte hata |
 | `test/monetization/pdf_export_quota_test.dart` | Free 2/gün PDF çıktısı, kotaların birbirini etkilememesi, başarısız işlemde kota harcanmaması, gün dönümünde yenilenme, Pro'da sınırsızlık, eski JSON ile geriye uyumluluk |
 | `test/widget/pro_widget_test.dart` | Ana ekran Pro kartı, Ayarlar Free/Pro, limit penceresi (İptal / Pro'yu İncele), Pro ekranı "Yakında", Mock Pro anahtarı |

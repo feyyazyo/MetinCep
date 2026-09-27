@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
 import '../core/constants/app_constants.dart';
+import '../core/utils/image_decoding.dart';
 import '../models/ocr_mode.dart';
 
 /// El yazısı için görüntü ön işleme. Saf (platformsuz) olduğu için test edilebilir.
@@ -154,8 +155,7 @@ String? _runHandwritingProfile(Map<String, String> payload) {
   final sourcePath = payload['source']!;
   final targetPath = payload['target']!;
 
-  final bytes = File(sourcePath).readAsBytesSync();
-  final decoded = img.decodeImage(bytes);
+  final decoded = decodeImageFileSafely(sourcePath);
   if (decoded == null) {
     return null;
   }

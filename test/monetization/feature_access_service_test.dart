@@ -10,6 +10,7 @@ import 'package:metincep/services/feature_access_service.dart';
 import 'package:metincep/services/purchase_service.dart';
 import 'package:metincep/services/usage_tracker.dart';
 
+import '../helpers/temp_dir.dart';
 import '../helpers/test_services.dart';
 
 class _Setup {
@@ -41,9 +42,7 @@ void main() {
   });
 
   tearDown(() async {
-    if (await directory.exists()) {
-      await directory.delete(recursive: true);
-    }
+    await deleteTempDirectory(directory);
   });
 
   group('FreeLimits', () {

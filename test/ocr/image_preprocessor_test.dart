@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:metincep/models/ocr_mode.dart';
 import 'package:metincep/services/image_preprocessor.dart';
+import '../helpers/temp_dir.dart';
 
 /// Yatay "metin satırları" çizer. [skewDegrees] verilirse satırlar eğik çizilir.
 img.Image buildDocument({
@@ -98,9 +99,7 @@ void main() {
     });
 
     tearDown(() async {
-      if (await directory.exists()) {
-        await directory.delete(recursive: true);
-      }
+      await deleteTempDirectory(directory);
     });
 
     test('basılı metin modunda görüntüye dokunulmaz (null döner)', () async {

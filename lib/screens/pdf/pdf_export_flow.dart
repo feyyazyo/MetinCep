@@ -104,7 +104,6 @@ class PdfExportFlow {
       return;
     }
     _busy = true;
-    PdfBytes? bytes;
     try {
       if (!skipAccessCheck) {
         final allowed = await ensureAccess(
@@ -118,6 +117,9 @@ class PdfExportFlow {
       }
 
       _showProgress(context);
+      // İçteki try yalnızca ilerleme penceresini kapatmak için; hata yukarıya
+      // gider. Bu yüzden aşağıya ancak PDF gerçekten oluştuysa geçilir.
+      final PdfBytes bytes;
       try {
         bytes = await build();
       } finally {
@@ -125,32 +127,29 @@ class PdfExportFlow {
           Navigator.of(context, rootNavigator: true).pop();
         }
       }
+
+      if (!context.mounted) {
+        return;
+      }
+      // PDF gerçekten oluştu: kota burada harcanır.
+      final services = AppScope.of(context);
+      await services.access.recordCompletedPdfExport();
+      if (!context.mounted) {
+        return;
+      }
+      await _offerSaveOrShare(context, bytes: bytes, fileName: fileName);
     } on AppException catch (error) {
       if (context.mounted) {
         showAppSnackBar(context, error.message);
       }
-      return;
     } catch (error) {
       debugPrint('PDF oluşturulamadı: $error');
       if (context.mounted) {
         showAppSnackBar(context, ErrorMessages.pdfCreateFailed);
       }
-      return;
     } finally {
       _busy = false;
     }
-
-    if (bytes == null || !context.mounted) {
-      return;
-    }
-
-    // PDF gerçekten oluştu: kota burada harcanır.
-    final services = AppScope.of(context);
-    await services.access.recordCompletedPdfExport();
-    if (!context.mounted) {
-      return;
-    }
-    await _offerSaveOrShare(context, bytes: bytes, fileName: fileName);
   }
 
   static void _showProgress(BuildContext context) {

@@ -6,7 +6,8 @@ import 'package:metincep/core/errors/app_exception.dart';
 import 'package:metincep/models/ocr_table.dart';
 import 'package:metincep/services/pdf_export_service.dart';
 
-import '../helpers/test_services.dart';
+import '../helpers/temp_dir.dart';
+import '../helpers/test_font.dart';
 
 /// A4 dikey ve yatay sayfa kutuları (pdf paketinin yazdığı biçim).
 const String portraitBox = '0 0 595.27559 841.88976';
@@ -45,9 +46,7 @@ void main() {
   });
 
   tearDown(() async {
-    if (await directory.exists()) {
-      await directory.delete(recursive: true);
-    }
+    await deleteTempDirectory(directory);
   });
 
   group('Metin → PDF', () {

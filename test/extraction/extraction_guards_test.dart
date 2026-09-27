@@ -8,6 +8,7 @@ import 'package:metincep/models/extraction_models.dart';
 import 'package:metincep/services/extraction_service.dart';
 import 'package:metincep/services/ocr_service.dart';
 import 'package:metincep/services/pdf_service.dart';
+import '../helpers/temp_dir.dart';
 
 /// Bu testler ML Kit ve PDFium eklentilerine ULAŞMADAN önce devreye giren
 /// koruma yollarını doğrular; bu yüzden gerçek cihaz olmadan deterministik çalışırlar.
@@ -26,9 +27,7 @@ void main() {
   });
 
   tearDown(() async {
-    if (await directory.exists()) {
-      await directory.delete(recursive: true);
-    }
+    await deleteTempDirectory(directory);
   });
 
   Future<ExtractionResult> run(

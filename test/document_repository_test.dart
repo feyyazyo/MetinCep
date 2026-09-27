@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:metincep/models/document_model.dart';
 import 'package:metincep/repositories/document_repository.dart';
+import 'helpers/temp_dir.dart';
 
 void main() {
   late Directory directory;
@@ -19,9 +20,7 @@ void main() {
   });
 
   tearDown(() async {
-    if (await directory.exists()) {
-      await directory.delete(recursive: true);
-    }
+    await deleteTempDirectory(directory);
   });
 
   test('kaydedilen belgeler uygulama yeniden açılınca durur', () async {

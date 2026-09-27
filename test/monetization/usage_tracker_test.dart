@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:metincep/services/usage_tracker.dart';
+import '../helpers/temp_dir.dart';
 
 void main() {
   late Directory directory;
@@ -19,9 +20,7 @@ void main() {
   });
 
   tearDown(() async {
-    if (await directory.exists()) {
-      await directory.delete(recursive: true);
-    }
+    await deleteTempDirectory(directory);
   });
 
   test('sayaçlar kaydedilir ve uygulama yeniden açılınca korunur', () async {

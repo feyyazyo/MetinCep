@@ -12,6 +12,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../core/constants/app_constants.dart';
 import '../core/errors/app_exception.dart';
 import '../core/utils/date_formatter.dart';
+import '../core/utils/image_decoding.dart';
 import '../core/utils/file_name_utils.dart';
 import '../models/ocr_table.dart';
 
@@ -255,11 +256,8 @@ class PreparedPdfImage {
 /// Fotoğrafı PDF'e uygun hale getirir: EXIF yönü uygulanır, boyut küçültülür.
 /// Üst düzey fonksiyondur; `compute` ile arka planda çalışır.
 PreparedPdfImage? prepareImageForPdf(String path) {
-  final file = File(path);
-  if (!file.existsSync()) {
-    return null;
-  }
-  final decoded = img.decodeImage(file.readAsBytesSync());
+  // Bozuk/çok küçük dosyalarda istisna atmaz, null döner (çağıran hata mesajı verir).
+  final decoded = decodeImageFileSafely(path);
   if (decoded == null) {
     return null;
   }

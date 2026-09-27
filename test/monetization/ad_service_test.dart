@@ -8,6 +8,7 @@ import 'package:metincep/services/entitlement_service.dart';
 import 'package:metincep/services/feature_access_service.dart';
 import 'package:metincep/services/purchase_service.dart';
 import 'package:metincep/services/usage_tracker.dart';
+import '../helpers/temp_dir.dart';
 
 /// Her zaman hazır reklam sağlayıcısı. "Hazır değil" durumu NoOpAdProvider testiyle kapsanır.
 class _FakeAdProvider implements AdProvider {
@@ -43,9 +44,7 @@ void main() {
   });
 
   tearDown(() async {
-    if (await directory.exists()) {
-      await directory.delete(recursive: true);
-    }
+    await deleteTempDirectory(directory);
   });
 
   AdService createAds(AdProvider provider) =>
