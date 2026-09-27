@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:metincep/app.dart';
@@ -14,6 +16,17 @@ void useTallView(WidgetTester tester) {
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
+}
+
+/// Free günlük haklarını test için verilen değerlere getirir.
+///
+/// Sayaçlar `setCountsForDebug` içinde, ilk `await`'ten önce eşzamanlı olarak
+/// bellekte güncellenir; widget'lar bu değeri hemen okur. Ardından gelen dosyaya
+/// yazma işlemi BEKLENMEZ: `testWidgets` sahte zamanda (FakeAsync) çalışır ve
+/// gerçek disk G/Ç'sini beklemek testi kilitler (bkz. WidgetTester.runAsync belgesi).
+/// Kalıcılık, gerçek diskle `test/monetization/usage_tracker_test.dart` içinde test edilir.
+void setFreeUsage(AppServices services, {required int ocrCount, required int pdfCount}) {
+  unawaited(services.usage.setCountsForDebug(ocrCount: ocrCount, pdfCount: pdfCount));
 }
 
 void main() {
@@ -66,10 +79,8 @@ void main() {
     useTallView(tester);
     final services = createTestServices();
     // Geliştirici aracı: 10 gerçek işlem yapmadan hakları doldur.
-    await services.usage.setCountsForDebug(
-      ocrCount: FreeLimits.dailyOcrOperations,
-      pdfCount: 0,
-    );
+    setFreeUsage(services, ocrCount: FreeLimits.dailyOcrOperations, pdfCount: 0);
+    expect(services.access.canUseOcr(), isFalse);
     await tester.pumpWidget(AppScope(services: services, child: const MetinCepApp()));
     await tester.pumpAndSettle();
 
@@ -92,10 +103,8 @@ void main() {
   testWidgets('Limit penceresinden Pro ekranına gidilir', (tester) async {
     useTallView(tester);
     final services = createTestServices();
-    await services.usage.setCountsForDebug(
-      ocrCount: 0,
-      pdfCount: FreeLimits.dailyPdfOperations,
-    );
+    setFreeUsage(services, ocrCount: 0, pdfCount: FreeLimits.dailyPdfOperations);
+    expect(services.access.canProcessPdf(), isFalse);
     await tester.pumpWidget(AppScope(services: services, child: const MetinCepApp()));
     await tester.pumpAndSettle();
 
