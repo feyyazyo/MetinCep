@@ -14,6 +14,8 @@ import '../core/utils/pdf_render_sizing.dart';
 import '../core/utils/text_layout_formatter.dart';
 import '../models/document_model.dart';
 import '../models/extraction_models.dart';
+import '../models/ocr_table.dart';
+import 'ocr_pipeline.dart';
 import 'ocr_service.dart';
 
 /// PDF'den metin çıkarma:
@@ -21,9 +23,15 @@ import 'ocr_service.dart';
 /// 2) Metin katmanı yoksa/yetersizse sayfa görüntüye çevrilip OCR'dan geçirilir.
 /// Sayfalar tek tek işlenir; bütün sayfalar aynı anda RAM'e alınmaz.
 class PdfService {
-  PdfService({required OcrService ocr}) : _ocr = ocr;
+  PdfService({required OcrService ocr, OcrPipeline pipeline = const OcrPipeline()})
+      : _ocr = ocr,
+        _pipeline = pipeline;
 
   final OcrService _ocr;
+
+  /// Taranmış sayfalarda OCR sonrası normalizasyon ve tablo algılama.
+  /// Metin katmanı olan sayfalara uygulanmaz: o metin OCR tahmini değil, birebir doğrudur.
+  final OcrPipeline _pipeline;
 
   Future<ExtractionResult> extract({
     required PdfExtractionRequest request,
@@ -63,13 +71,18 @@ class PdfService {
       onProgress(ExtractionProgress(completed: 0, total: total, unit: ProgressUnit.page));
       final tempDirectory = await getTemporaryDirectory();
       final sections = <String>[];
+      final rawSections = <String>[];
+      final tables = <OcrTable>[];
       var ocrPageCount = 0;
+      var normalizationCount = 0;
 
       for (var index = 0; index < total; index++) {
         cancellationToken.throwIfCancelled();
         final page = pages[index];
 
         var pageText = TextLayoutFormatter.normalize(await _readTextLayer(page));
+        // Metin katmanı ham metindir; düzeltme uygulanmaz.
+        var pageRawText = pageText;
 
         if (TextLayoutFormatter.visibleCharCount(pageText) <
             AppConstants.minTextLayerChars) {
@@ -81,20 +94,27 @@ class PdfService {
               detail: 'Sayfa ${index + 1} görüntü olarak okunuyor…',
             ),
           );
-          final ocrText = await _recognizePage(
+          final recognized = await _recognizePage(
             page: page,
             pageIndex: index,
             tempDirectory: tempDirectory,
             cancellationToken: cancellationToken,
           );
           ocrPageCount++;
-          if (TextLayoutFormatter.visibleCharCount(ocrText) >
+          if (TextLayoutFormatter.visibleCharCount(recognized.text) >
               TextLayoutFormatter.visibleCharCount(pageText)) {
-            pageText = ocrText;
+            pageText = recognized.text;
+            pageRawText = recognized.rawText;
+            normalizationCount += recognized.normalizationCount;
+            final table = recognized.table;
+            if (table != null) {
+              tables.add(table);
+            }
           }
         }
 
         sections.add(pageText);
+        rawSections.add(pageRawText);
         onProgress(
           ExtractionProgress(completed: index + 1, total: total, unit: ProgressUnit.page),
         );
@@ -107,11 +127,14 @@ class PdfService {
 
       return ExtractionResult(
         text: TextLayoutFormatter.joinSections(sections: sections, label: 'Sayfa'),
+        rawText: TextLayoutFormatter.joinSections(sections: rawSections, label: 'Sayfa'),
         source: DocumentSource.pdf,
         suggestedTitle: FileNameUtils.withoutExtension(request.fileName),
         unitCount: total,
         ocrUnitCount: ocrPageCount,
         sourcePageCount: pageCount,
+        tables: tables,
+        normalizationCount: normalizationCount,
       );
     } finally {
       try {
@@ -144,7 +167,7 @@ class PdfService {
     }
   }
 
-  Future<String> _recognizePage({
+  Future<OcrPipelineResult> _recognizePage({
     required PdfPage page,
     required int pageIndex,
     required Directory tempDirectory,
@@ -157,16 +180,17 @@ class PdfService {
     try {
       final pngBytes = await _renderPageToPng(page);
       if (pngBytes == null) {
-        return '';
+        return OcrPipelineResult.empty;
       }
       cancellationToken.throwIfCancelled();
       await imageFile.writeAsBytes(pngBytes);
-      return await _ocr.recognizeFile(imageFile.path);
+      final recognized = await _ocr.recognizeFile(imageFile.path);
+      return _pipeline.process(recognized);
     } on OperationCancelledException {
       rethrow;
     } catch (error) {
       debugPrint('Sayfa ${pageIndex + 1} OCR hatası: $error');
-      return '';
+      return OcrPipelineResult.empty;
     } finally {
       await _deleteQuietly(imageFile);
     }

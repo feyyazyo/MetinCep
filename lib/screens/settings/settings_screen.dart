@@ -5,6 +5,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/errors/app_exception.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/ui_helpers.dart';
+import '../../models/ocr_mode.dart';
 import '../../models/subscription_model.dart';
 import '../pro/pro_screen.dart';
 import 'privacy_screen.dart';
@@ -153,15 +154,15 @@ class SettingsScreen extends StatelessWidget {
               ],
             ),
             const _SectionTitle('Dil ve metin tanıma'),
-            const _SettingsCard(
+            _SettingsCard(
               children: [
-                ListTile(
+                const ListTile(
                   leading: Icon(Icons.language),
                   title: Text('Uygulama dili'),
                   subtitle: Text('Türkçe'),
                 ),
-                Divider(height: 1, indent: 56),
-                ListTile(
+                const Divider(height: 1, indent: 56),
+                const ListTile(
                   leading: Icon(Icons.translate),
                   title: Text('OCR dili'),
                   subtitle: Text(
@@ -169,6 +170,24 @@ class SettingsScreen extends StatelessWidget {
                     'Latin alfabeli diller otomatik tanınır. Ayrı dil seçmeniz gerekmez.',
                   ),
                   isThreeLine: true,
+                ),
+                const Divider(height: 1, indent: 56),
+                ListenableBuilder(
+                  listenable: settings,
+                  builder: (context, _) => SwitchListTile(
+                    secondary: const Icon(Icons.draw_outlined),
+                    title: const Text('El yazısı modu'),
+                    subtitle: const Text(
+                      'Fotoğraf OCR öncesi kontrast ve eğiklik düzeltmesi uygular. '
+                      'El yazısı tanıma yine cihazdaki motorla yapılır; sonuç basılı '
+                      'metne göre daha değişkendir.',
+                    ),
+                    isThreeLine: true,
+                    value: settings.ocrMode == OcrMode.handwriting,
+                    onChanged: (enabled) => settings.setOcrMode(
+                      enabled ? OcrMode.handwriting : OcrMode.printed,
+                    ),
+                  ),
                 ),
               ],
             ),

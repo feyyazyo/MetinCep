@@ -1,14 +1,80 @@
 import 'dart:math' as math;
 
+/// OCR motorundan bağımsız kelime (element) modeli.
+/// Tablo algılama için yatay koordinatlar şarttır.
+class OcrWord {
+  const OcrWord({
+    required this.text,
+    required this.left,
+    required this.right,
+    required this.top,
+    required this.bottom,
+    this.confidence,
+  });
+
+  final String text;
+  final double left;
+  final double right;
+  final double top;
+  final double bottom;
+
+  /// OCR motorunun bildirdiği güven değeri (0..1). Bilinmiyorsa null.
+  final double? confidence;
+
+  double get width => (right - left).abs();
+
+  double get height => (bottom - top).abs();
+
+  double get centerY => (top + bottom) / 2;
+
+  OcrWord copyWith({String? text}) => OcrWord(
+        text: text ?? this.text,
+        left: left,
+        right: right,
+        top: top,
+        bottom: bottom,
+        confidence: confidence,
+      );
+}
+
 /// OCR motorundan bağımsız satır modeli (test edilebilirlik için).
+///
+/// [left], [right], [confidence] ve [words] V1'den sonra eklendi; eski
+/// çağrılar (`OcrLine(text:, top:, bottom:)`) çalışmaya devam eder.
 class OcrLine {
-  const OcrLine({required this.text, required this.top, required this.bottom});
+  const OcrLine({
+    required this.text,
+    required this.top,
+    required this.bottom,
+    this.left = 0,
+    this.right = 0,
+    this.confidence,
+    this.words = const [],
+  });
 
   final String text;
   final double top;
   final double bottom;
+  final double left;
+  final double right;
+  final double? confidence;
+  final List<OcrWord> words;
 
   double get height => (bottom - top).abs();
+
+  double get width => (right - left).abs();
+
+  double get centerY => (top + bottom) / 2;
+
+  OcrLine copyWith({String? text, List<OcrWord>? words}) => OcrLine(
+        text: text ?? this.text,
+        top: top,
+        bottom: bottom,
+        left: left,
+        right: right,
+        confidence: confidence,
+        words: words ?? this.words,
+      );
 }
 
 /// OCR motorundan bağımsız blok (paragraf) modeli.

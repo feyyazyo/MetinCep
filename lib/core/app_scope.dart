@@ -5,6 +5,7 @@ import '../services/ad_service.dart';
 import '../services/entitlement_service.dart';
 import '../services/extraction_service.dart';
 import '../services/feature_access_service.dart';
+import '../services/pdf_export_service.dart';
 import '../services/settings_controller.dart';
 import '../services/share_service.dart';
 import '../services/source_picker_service.dart';
@@ -22,6 +23,7 @@ class AppServices {
     required this.entitlement,
     required this.access,
     required this.ads,
+    required this.pdfExport,
   });
 
   final DocumentRepository documents;
@@ -41,6 +43,9 @@ class AppServices {
 
   /// Reklam kararları (bu sürümde reklam SDK'sı yok).
   final AdService ads;
+
+  /// Metin / fotoğraf / tablo → PDF oluşturma (çevrimdışı).
+  final PdfExportService pdfExport;
 }
 
 class AppScope extends InheritedWidget {

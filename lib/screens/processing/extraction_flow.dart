@@ -7,6 +7,7 @@ import '../../models/document_model.dart';
 import '../../models/extraction_models.dart';
 import '../../services/feature_access_service.dart';
 import '../../services/source_picker_service.dart';
+import '../pro/access_gate.dart';
 import '../pro/limit_dialog.dart';
 import '../pro/pro_screen.dart';
 import '../result/result_screen.dart';
@@ -195,10 +196,16 @@ class ExtractionFlow {
     List<String> paths,
     DocumentSource source,
   ) {
+    // Tanıma modu Ayarlar'dan gelir; OCR servisi modu bir parametre olarak alır.
+    final mode = AppScope.of(context).settings.ocrMode;
     return _push(
       context,
       ProcessingScreen(
-        request: ImageExtractionRequest(imagePaths: paths, source: source),
+        request: ImageExtractionRequest(
+          imagePaths: paths,
+          source: source,
+          mode: mode,
+        ),
       ),
     );
   }
@@ -213,17 +220,9 @@ class ExtractionFlow {
     BuildContext context, {
     required bool Function(FeatureAccessService access) isAllowed,
     required LimitPrompt Function(FeatureAccessService access) prompt,
-  }) async {
-    final access = AppScope.of(context).access;
-    if (isAllowed(access)) {
-      return true;
-    }
-    final choice = await showLimitDialog(context, prompt(access));
-    if (choice != LimitChoice.viewPro || !context.mounted) {
-      return false;
-    }
-    await ProScreen.open(context);
-    return context.mounted && isAllowed(access);
+  }) {
+    // Kapı mantığı tek yerde: PDF çıktısı akışı da aynı yardımcıyı kullanır.
+    return ensureAccess(context, isAllowed: isAllowed, prompt: prompt);
   }
 
   /// Seçilen fotoğraf sayısı plan sınırını aşıyorsa kullanıcıya sorar.

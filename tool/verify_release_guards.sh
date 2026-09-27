@@ -63,7 +63,8 @@ debug_methods=$(grep -c 'ForDebug(' "$USAGE" || true)
 unguarded=$(awk '
   /ForDebug\(/ {
     name = $0; found = 0
-    for (i = 0; i < 4; i++) {
+    # Pencere, çok satırlı imzaları da kapsar; koruma yine metodun başında olmalı.
+    for (i = 0; i < 10; i++) {
       if ((getline line) > 0 && line ~ /kDebugMode/) { found = 1; break }
     }
     if (!found) print name

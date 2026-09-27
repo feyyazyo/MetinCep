@@ -24,6 +24,11 @@ class LimitPrompt {
         message: 'Pro ile sınırsız PDF işleyebilirsin. Free hakların yarın yenilenir.',
       );
 
+  factory LimitPrompt.dailyPdfExport() => const LimitPrompt(
+        title: 'Günlük PDF oluşturma limitin doldu.',
+        message: 'Pro ile sınırsız PDF oluşturabilirsin. Free hakların yarın yenilenir.',
+      );
+
   factory LimitPrompt.pdfPages({required int pageCount, required int maxPages}) => LimitPrompt(
         title: 'Bu PDF $pageCount sayfa.',
         message: "Free sürümde tek PDF'te en fazla $maxPages sayfa işlenir. "

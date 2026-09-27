@@ -64,6 +64,7 @@ class ProScreen extends StatelessWidget {
                   _UsageCard(
                     remainingOcr: access.remainingOcrToday ?? 0,
                     remainingPdf: access.remainingPdfToday ?? 0,
+                    remainingPdfExports: access.remainingPdfExportsToday ?? 0,
                   ),
                   const SizedBox(height: 20),
                   SizedBox(
@@ -153,6 +154,10 @@ class _FeatureList extends StatelessWidget {
       ('Limitsiz PDF', 'Free: günde ${FreeLimits.dailyPdfOperations} PDF'),
       ('Çok sayfalı PDF', 'Free: PDF başına en fazla ${FreeLimits.maxPdfPages} sayfa'),
       ('Toplu OCR', 'Free: tek seferde en fazla ${FreeLimits.maxImagesPerBatch} fotoğraf'),
+      (
+        'Limitsiz PDF oluşturma',
+        'Free: günde ${FreeLimits.dailyPdfExports} PDF (metin, fotoğraf, tablo)',
+      ),
       ('Reklamsız kullanım', "Pro'da hiçbir zaman reklam gösterilmez"),
       (
         'Daha yüksek dosya limitleri',
@@ -184,10 +189,15 @@ class _FeatureList extends StatelessWidget {
 }
 
 class _UsageCard extends StatelessWidget {
-  const _UsageCard({required this.remainingOcr, required this.remainingPdf});
+  const _UsageCard({
+    required this.remainingOcr,
+    required this.remainingPdf,
+    required this.remainingPdfExports,
+  });
 
   final int remainingOcr;
   final int remainingPdf;
+  final int remainingPdfExports;
 
   @override
   Widget build(BuildContext context) {
@@ -216,6 +226,12 @@ class _UsageCard extends StatelessWidget {
               label: 'Bugün kalan PDF',
               remaining: remainingPdf,
               limit: FreeLimits.dailyPdfOperations,
+            ),
+            const SizedBox(height: 10),
+            _UsageRow(
+              label: 'Bugün kalan PDF oluşturma',
+              remaining: remainingPdfExports,
+              limit: FreeLimits.dailyPdfExports,
             ),
             const SizedBox(height: 10),
             Text(

@@ -42,9 +42,17 @@ class FeatureAccessService extends ChangeNotifier {
   int? get remainingPdfToday =>
       _remaining(limits.dailyPdfOperations, todayUsage.pdfCount);
 
+  /// Bugün kalan PDF oluşturma (çıktı) işlemi. null = sınırsız.
+  int? get remainingPdfExportsToday =>
+      _remaining(limits.dailyPdfExports, todayUsage.pdfExportCount);
+
   bool canUseOcr() => _hasRemaining(remainingOcrToday);
 
   bool canProcessPdf() => _hasRemaining(remainingPdfToday);
+
+  /// Metin / fotoğraf / tablo → PDF oluşturulabilir mi?
+  /// El yazısı ve tablo ayrı kota tüketmez; PDF çıktısı bu kurala tabidir.
+  bool canExportPdf() => _hasRemaining(remainingPdfExportsToday);
 
   /// [imageCount] fotoğraf tek seferde işlenebilir mi?
   bool canUseBatchOcr(int imageCount) {
@@ -79,6 +87,15 @@ class FeatureAccessService extends ChangeNotifier {
     } else {
       await _usage.recordOcr();
     }
+  }
+
+  /// PDF dosyası başarıyla oluşturulduğunda çağrılır.
+  /// Dosya oluşturma hatası veya iptalde çağrılmaz: kota harcanmaz.
+  Future<void> recordCompletedPdfExport() async {
+    if (isPro) {
+      return;
+    }
+    await _usage.recordPdfExport();
   }
 
   @override

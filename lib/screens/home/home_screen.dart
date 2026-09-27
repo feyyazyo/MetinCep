@@ -7,6 +7,7 @@ import '../../widgets/action_card.dart';
 import '../../widgets/ad_banner_slot.dart';
 import '../../widgets/document_item.dart';
 import '../../widgets/empty_state.dart';
+import '../pdf/pdf_export_flow.dart';
 import '../pro/pro_screen.dart';
 import '../processing/extraction_flow.dart';
 
@@ -66,6 +67,12 @@ class HomeScreen extends StatelessWidget {
                   title: 'PDF Aç',
                   subtitle: "Telefondaki PDF'den metni çıkarın",
                   onTap: () => ExtractionFlow.startPdf(context),
+                ),
+                ActionCard(
+                  icon: Icons.picture_as_pdf_outlined,
+                  title: 'Fotoğraflardan PDF',
+                  subtitle: 'Fotoğrafları tek PDF dosyasına dönüştürün',
+                  onTap: () => PdfExportFlow.exportImagesFromGallery(context),
                 ),
                 const SizedBox(height: 20),
                 Row(

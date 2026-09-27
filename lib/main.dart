@@ -11,6 +11,7 @@ import 'services/entitlement_service.dart';
 import 'services/extraction_service.dart';
 import 'services/feature_access_service.dart';
 import 'services/ocr_service.dart';
+import 'services/pdf_export_service.dart';
 import 'services/pdf_service.dart';
 import 'services/purchase_service.dart';
 import 'services/settings_controller.dart';
@@ -54,6 +55,7 @@ Future<void> main() async {
     access: access,
     // Reklam SDK'sı yok; AdMob ayrı bir aşamada AdProvider olarak bağlanacak.
     ads: AdService(access: access, provider: const NoOpAdProvider()),
+    pdfExport: PdfExportService(),
   );
 
   runApp(AppScope(services: services, child: const MetinCepApp()));

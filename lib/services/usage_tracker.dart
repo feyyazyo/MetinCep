@@ -8,7 +8,8 @@ import '../models/usage_model.dart';
 
 /// Free sürümün günlük işlem sayaçlarını cihazda tutar (sunucu yok, internet gerekmez).
 ///
-/// Saklanan alanlar: `date`, `ocrCount`, `pdfCount`, `lastSeenAt`.
+/// Saklanan alanlar: `date`, `ocrCount`, `pdfCount`, `pdfExportCount`, `lastSeenAt`.
+/// `pdfExportCount` V1'den sonra eklendi; eski dosyalarda alan yoksa 0 sayılır.
 ///
 /// Saat oynama koruması (çevrimdışı, "makul caydırıcılık" düzeyinde):
 /// - Sayaçlar yalnızca yerel tarih kayıtlı tarihten İLERİDE olduğunda sıfırlanır.
@@ -41,6 +42,7 @@ class UsageTracker extends ChangeNotifier {
   String _dayKey = '';
   int _ocrCount = 0;
   int _pdfCount = 0;
+  int _pdfExportCount = 0;
   int _lastSeenMs = 0;
   bool _clockRollbackDetected = false;
   Future<void> _pendingWrite = Future<void>.value();
@@ -53,7 +55,12 @@ class UsageTracker extends ChangeNotifier {
     if (_refresh()) {
       _persist();
     }
-    return DailyUsage(dayKey: _dayKey, ocrCount: _ocrCount, pdfCount: _pdfCount);
+    return DailyUsage(
+      dayKey: _dayKey,
+      ocrCount: _ocrCount,
+      pdfCount: _pdfCount,
+      pdfExportCount: _pdfExportCount,
+    );
   }
 
   Future<void> load() async {
@@ -65,6 +72,7 @@ class UsageTracker extends ChangeNotifier {
           _dayKey = _readDayKey(decoded['date']);
           _ocrCount = _readCount(decoded['ocrCount']);
           _pdfCount = _readCount(decoded['pdfCount']);
+          _pdfExportCount = _readCount(decoded['pdfExportCount']);
           _lastSeenMs = _readCount(decoded['lastSeenAt']);
         }
       }
@@ -74,6 +82,7 @@ class UsageTracker extends ChangeNotifier {
       _dayKey = '';
       _ocrCount = 0;
       _pdfCount = 0;
+      _pdfExportCount = 0;
       _lastSeenMs = 0;
     }
     _refresh();
@@ -85,15 +94,23 @@ class UsageTracker extends ChangeNotifier {
 
   Future<void> recordPdf() => _increment(pdf: 1);
 
+  /// PDF çıktısı (metin/fotoğraf/tablo → PDF) başarıyla oluşturulduğunda çağrılır.
+  Future<void> recordPdfExport() => _increment(pdfExport: 1);
+
   /// Yalnızca debug derlemede: sayaçları verilen değerlere getirir.
   /// Limit pencerelerini 10 gerçek çekim yapmadan test etmek için kullanılır.
-  Future<void> setCountsForDebug({required int ocrCount, required int pdfCount}) async {
+  Future<void> setCountsForDebug({
+    required int ocrCount,
+    required int pdfCount,
+    int pdfExportCount = 0,
+  }) async {
     if (!kDebugMode) {
       return;
     }
     _refresh();
     _ocrCount = ocrCount < 0 ? 0 : ocrCount;
     _pdfCount = pdfCount < 0 ? 0 : pdfCount;
+    _pdfExportCount = pdfExportCount < 0 ? 0 : pdfExportCount;
     notifyListeners();
     await _persist();
   }
@@ -106,14 +123,16 @@ class UsageTracker extends ChangeNotifier {
     _refresh();
     _ocrCount = 0;
     _pdfCount = 0;
+    _pdfExportCount = 0;
     notifyListeners();
     await _persist();
   }
 
-  Future<void> _increment({int ocr = 0, int pdf = 0}) async {
+  Future<void> _increment({int ocr = 0, int pdf = 0, int pdfExport = 0}) async {
     _refresh();
     _ocrCount += ocr;
     _pdfCount += pdf;
+    _pdfExportCount += pdfExport;
     notifyListeners();
     await _persist();
   }
@@ -142,6 +161,7 @@ class UsageTracker extends ChangeNotifier {
       _dayKey = todayKey;
       _ocrCount = 0;
       _pdfCount = 0;
+      _pdfExportCount = 0;
       return true;
     }
     return false;
@@ -153,6 +173,7 @@ class UsageTracker extends ChangeNotifier {
       'date': _dayKey,
       'ocrCount': _ocrCount,
       'pdfCount': _pdfCount,
+      'pdfExportCount': _pdfExportCount,
       'lastSeenAt': _lastSeenMs,
     });
     final write = _pendingWrite.then((_) => _writeAtomically(snapshot));

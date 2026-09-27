@@ -9,9 +9,10 @@ import 'package:share_plus/share_plus.dart';
 import '../core/constants/app_constants.dart';
 import '../core/utils/file_name_utils.dart';
 
+/// Dosya kaydetme sonucu (TXT ve PDF için ortak).
 enum TxtSaveOutcome { saved, cancelled }
 
-/// Kopyalama, paylaşma ve TXT dosyası kaydetme.
+/// Kopyalama, paylaşma, TXT ve PDF dosyası kaydetme.
 class ShareService {
   Future<void> copyToClipboard(String text) {
     return Clipboard.setData(ClipboardData(text: text));
@@ -41,16 +42,40 @@ class ShareService {
 
   /// Android "Farklı kaydet" ekranını açar; kullanıcı konumu seçer (ör. İndirilenler).
   /// Depolama izni gerekmez.
-  Future<TxtSaveOutcome> saveAsTxt(String text, {required String fileName}) async {
-    final safeName = FileNameUtils.sanitize(fileName);
-    final bytes = Uint8List.fromList(utf8.encode(text));
-    final savedPath = await FilePicker.platform.saveFile(
+  Future<TxtSaveOutcome> saveAsTxt(String text, {required String fileName}) {
+    return saveBytes(
+      Uint8List.fromList(utf8.encode(text)),
+      fileName: fileName,
+      extension: 'txt',
       dialogTitle: 'TXT olarak kaydet',
-      fileName: '$safeName.txt',
+    );
+  }
+
+  /// Android "Farklı kaydet" ekranıyla herhangi bir dosyayı kaydeder (izin gerekmez).
+  Future<TxtSaveOutcome> saveBytes(
+    Uint8List bytes, {
+    required String fileName,
+    required String extension,
+    String? dialogTitle,
+  }) async {
+    final safeName = FileNameUtils.sanitize(fileName);
+    final savedPath = await FilePicker.platform.saveFile(
+      dialogTitle: dialogTitle ?? 'Kaydet',
+      fileName: '$safeName.$extension',
       type: FileType.custom,
-      allowedExtensions: const ['txt'],
+      allowedExtensions: [extension],
       bytes: bytes,
     );
     return savedPath == null ? TxtSaveOutcome.cancelled : TxtSaveOutcome.saved;
+  }
+
+  /// Hazır bir dosyayı Android paylaşım menüsüyle paylaşır.
+  Future<void> shareFile(File file, {required String mimeType, String? subject}) {
+    return SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path, mimeType: mimeType)],
+        subject: subject,
+      ),
+    );
   }
 }

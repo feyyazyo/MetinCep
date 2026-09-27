@@ -24,6 +24,11 @@ dependencies:
   share_plus: ">=11.0.0 <14.0.0"
   # Uygulama klasörleri (yerel kayıtlar)
   path_provider: ^2.1.4
+  # PDF OLUŞTURMA (çıktı): metin / fotoğraf / tablo → PDF. Saf Dart, çevrimdışı.
+  # Üst sınır 3.13.0: 3.13+ Dart 3.12 ister, bu proje Flutter 3.35 (Dart 3.9) ile çalışır.
+  pdf: ">=3.11.0 <3.13.0"
+  # Görüntü ön işleme (el yazısı profili) ve PDF için fotoğraf ölçekleme. Saf Dart.
+  image: ">=4.2.0 <5.0.0"
 
 dev_dependencies:
   flutter_test:
@@ -32,3 +37,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    # PDF çıktısında Türkçe karakterler için gömülü Unicode yazı tipi.
+    # PDF'in yerleşik fontları ş, ğ, İ, ı harflerini içermez.
+    - assets/fonts/DejaVuSans.ttf

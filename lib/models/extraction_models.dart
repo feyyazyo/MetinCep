@@ -1,4 +1,6 @@
 import 'document_model.dart';
+import 'ocr_mode.dart';
+import 'ocr_table.dart';
 
 /// Metin çıkarma isteği. V2'de yeni kaynak türleri (ör. Word) buraya eklenebilir.
 abstract class ExtractionRequest {
@@ -9,9 +11,16 @@ abstract class ExtractionRequest {
 
 /// Bir veya birden fazla fotoğraf (toplu işleme hazır).
 class ImageExtractionRequest extends ExtractionRequest {
-  const ImageExtractionRequest({required this.imagePaths, required this.source});
+  const ImageExtractionRequest({
+    required this.imagePaths,
+    required this.source,
+    this.mode = OcrMode.printed,
+  });
 
   final List<String> imagePaths;
+
+  /// Basılı metin (varsayılan) veya el yazısı profili.
+  final OcrMode mode;
 
   @override
   final DocumentSource source;
@@ -78,8 +87,12 @@ class ExtractionResult {
     this.unitCount = 1,
     this.ocrUnitCount = 0,
     this.sourcePageCount,
+    this.rawText,
+    this.tables = const [],
+    this.normalizationCount = 0,
   });
 
+  /// Kullanıcıya gösterilen metin (karakter normalizasyonundan geçmiş hali).
   final String text;
   final DocumentSource source;
   final String? suggestedTitle;
@@ -93,5 +106,21 @@ class ExtractionResult {
   /// PDF'in toplam sayfa sayısı. [unitCount]'tan büyükse yalnızca ilk sayfalar işlenmiştir.
   final int? sourcePageCount;
 
+  /// OCR'ın ham (düzeltilmemiş) çıktısı. Yanlış bir otomatik düzeltme olursa
+  /// veri kaybolmasın diye saklanır; kullanıcı sonuç ekranından ham metne dönebilir.
+  final String? rawText;
+
+  /// Güvenilir şekilde algılanan tablolar. Boşsa metin akışı kullanılır.
+  final List<OcrTable> tables;
+
+  /// Karakter normalizasyonunda düzeltilen jeton sayısı (ör. ME2AR → MEZAR).
+  final int normalizationCount;
+
   bool get isPartial => sourcePageCount != null && sourcePageCount! > unitCount;
+
+  OcrTable? get primaryTable => tables.isEmpty ? null : tables.first;
+
+  /// Ham metin, gösterilen metinden farklıysa kullanıcıya "ham metne dön" sunulur.
+  bool get hasRawDifference =>
+      rawText != null && rawText!.trim().isNotEmpty && rawText!.trim() != text.trim();
 }

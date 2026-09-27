@@ -9,7 +9,10 @@ import '../../core/utils/text_stats.dart';
 import '../../core/utils/ui_helpers.dart';
 import '../../models/document_model.dart';
 import '../../models/extraction_models.dart';
+import '../../models/ocr_table.dart';
 import '../../services/share_service.dart';
+import '../pdf/pdf_export_flow.dart';
+import 'table_preview_screen.dart';
 
 /// OCR / PDF sonucunu veya kayıtlı bir belgeyi düzenleme ekranı.
 class ResultScreen extends StatefulWidget {
@@ -65,6 +68,9 @@ class _ResultScreenState extends State<ResultScreen> {
   bool _busy = false;
   bool _saving = false;
 
+  /// Algılanan tablo (kullanıcı hücreleri düzenlerse güncellenir).
+  OcrTable? _table;
+
   bool get _isSaved => _documentId != null;
 
   bool get _hasUnsavedChanges {
@@ -76,6 +82,7 @@ class _ResultScreenState extends State<ResultScreen> {
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.initialText);
+    _table = widget.extraction?.primaryTable;
     final document = widget.document;
     if (document != null) {
       _documentId = document.id;
@@ -352,6 +359,7 @@ class _ResultScreenState extends State<ResultScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                 child: _InfoLine(text: _infoText()),
               ),
+              _buildNotices(context),
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -406,6 +414,160 @@ class _ResultScreenState extends State<ResultScreen> {
     return '$origin · Hataları düzeltebilirsiniz';
   }
 
+  /// Tablo ve karakter düzeltme bildirimleri. Yoksa hiç yer kaplamaz.
+  Widget _buildNotices(BuildContext context) {
+    final extraction = widget.extraction;
+    final table = _table;
+    final showRawRestore = extraction != null &&
+        extraction.normalizationCount > 0 &&
+        extraction.hasRawDifference;
+
+    if (table == null && !showRawRestore) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        children: [
+          if (table != null)
+            ActionChip(
+              avatar: const Icon(Icons.table_chart_outlined, size: 18),
+              label: Text('Tablo: ${table.rowCount} satır × ${table.columnCount} kolon'),
+              onPressed: _busy ? null : _openTablePreview,
+            ),
+          if (showRawRestore)
+            ActionChip(
+              avatar: const Icon(Icons.undo, size: 18),
+              label: Text(
+                '${extraction.normalizationCount} düzeltme · ham metne dön',
+              ),
+              onPressed: _busy ? null : _useRawText,
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// OCR'ın ham çıktısına döner. Yanlış bir otomatik düzeltme olduysa veri kaybı olmaz.
+  void _useRawText() {
+    final raw = widget.extraction?.rawText;
+    if (raw == null || raw.trim().isEmpty) {
+      return;
+    }
+    final previous = _controller.value;
+    _controller.text = raw;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: const Text('Ham OCR metni yüklendi.'),
+          action: SnackBarAction(
+            label: 'Geri al',
+            onPressed: () {
+              if (mounted) {
+                _controller.value = previous;
+              }
+            },
+          ),
+        ),
+      );
+  }
+
+  Future<void> _openTablePreview() async {
+    final table = _table;
+    if (table == null) {
+      return;
+    }
+    final result = await Navigator.of(context).push<TablePreviewResult>(
+      MaterialPageRoute<TablePreviewResult>(
+        builder: (_) => TablePreviewScreen(
+          table: table,
+          title: _titleForFiles(),
+        ),
+      ),
+    );
+    if (result == null || !mounted) {
+      return;
+    }
+    setState(() => _table = result.table);
+    if (result.replaceTextWithTable) {
+      final previous = _controller.value;
+      _controller.text = result.table.toAlignedText();
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: const Text('Tablo metne dönüştürüldü.'),
+            action: SnackBarAction(
+              label: 'Geri al',
+              onPressed: () {
+                if (mounted) {
+                  _controller.value = previous;
+                }
+              },
+            ),
+          ),
+        );
+    }
+  }
+
+  Future<void> _exportPdf() async {
+    final text = _controller.text;
+    final table = _table;
+    if (text.trim().isEmpty && table == null) {
+      showAppSnackBar(context, ErrorMessages.pdfEmptyContent);
+      return;
+    }
+
+    if (table != null) {
+      final asTable = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('PDF nasıl oluşturulsun?'),
+          content: const Text(
+            'Algılanan tablo gerçek PDF tablosu olarak aktarılabilir '
+            'ya da düzenlediğin metin olduğu gibi yazdırılabilir.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Metin olarak'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Tablo olarak'),
+            ),
+          ],
+        ),
+      );
+      if (asTable == null || !mounted) {
+        return;
+      }
+      if (asTable) {
+        await PdfExportFlow.exportTable(
+          context,
+          title: _titleForFiles(),
+          table: table,
+        );
+        return;
+      }
+    }
+
+    if (!mounted) {
+      return;
+    }
+    await PdfExportFlow.exportText(
+      context,
+      title: _titleForFiles(),
+      text: text,
+    );
+  }
+
   Widget _buildActions(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -451,6 +613,18 @@ class _ResultScreenState extends State<ResultScreen> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 4),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+              onPressed: _busy ? null : _exportPdf,
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+              label: const Text('PDF olarak kaydet'),
+            ),
           ),
           const SizedBox(height: 8),
           SizedBox(

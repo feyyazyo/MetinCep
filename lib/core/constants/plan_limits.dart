@@ -7,6 +7,7 @@ class PlanLimits {
   const PlanLimits({
     this.dailyOcrOperations,
     this.dailyPdfOperations,
+    this.dailyPdfExports,
     this.maxPdfPages,
     this.maxImagesPerBatch,
     this.maxPdfFileSizeBytes,
@@ -16,8 +17,11 @@ class PlanLimits {
   /// null = sınırsız.
   final int? dailyOcrOperations;
 
-  /// Günlük PDF işlemi. null = sınırsız.
+  /// Günlük PDF işlemi (PDF okuma / girdi). null = sınırsız.
   final int? dailyPdfOperations;
+
+  /// Günlük PDF oluşturma (çıktı) işlemi: metin/fotoğraf/tablo → PDF. null = sınırsız.
+  final int? dailyPdfExports;
 
   /// Tek PDF'te işlenebilecek en fazla sayfa. null = sınırsız.
   final int? maxPdfPages;
@@ -34,6 +38,7 @@ class FreeLimits {
 
   static const int dailyOcrOperations = 10;
   static const int dailyPdfOperations = 3;
+  static const int dailyPdfExports = 2;
   static const int maxPdfPages = 10;
   static const int maxImagesPerBatch = 3;
   static const int maxPdfFileSizeMb = 25;
@@ -41,6 +46,7 @@ class FreeLimits {
   static const PlanLimits plan = PlanLimits(
     dailyOcrOperations: dailyOcrOperations,
     dailyPdfOperations: dailyPdfOperations,
+    dailyPdfExports: dailyPdfExports,
     maxPdfPages: maxPdfPages,
     maxImagesPerBatch: maxImagesPerBatch,
     maxPdfFileSizeBytes: maxPdfFileSizeMb * 1024 * 1024,

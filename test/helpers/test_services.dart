@@ -8,12 +8,24 @@ import 'package:metincep/services/entitlement_service.dart';
 import 'package:metincep/services/extraction_service.dart';
 import 'package:metincep/services/feature_access_service.dart';
 import 'package:metincep/services/ocr_service.dart';
+import 'package:metincep/services/pdf_export_service.dart';
 import 'package:metincep/services/pdf_service.dart';
 import 'package:metincep/services/purchase_service.dart';
 import 'package:metincep/services/settings_controller.dart';
 import 'package:metincep/services/share_service.dart';
 import 'package:metincep/services/source_picker_service.dart';
 import 'package:metincep/services/usage_tracker.dart';
+
+/// PDF yazı tipini testlerde doğrudan dosyadan okur.
+/// Böylece testler asset paketine (rootBundle) bağımlı olmaz.
+///
+/// Tür açıkça yazılmak yerine [PdfFontLoader] takma adıyla verilir; bu dosya
+/// yalnızca `flutter/material.dart` içe aldığı için ayrıca `dart:typed_data`
+/// içe almak gerekmez.
+final PdfFontLoader testFontLoader = () async {
+  final bytes = await File('assets/fonts/DejaVuSans.ttf').readAsBytes();
+  return bytes.buffer.asByteData(bytes.offsetInBytes, bytes.lengthInBytes);
+};
 
 /// Test için satın alma sağlayıcısı: verilen ürünler etkin sayılır.
 class FakePurchaseService implements PurchaseService {
@@ -60,6 +72,10 @@ AppServices createTestServices({
     entitlement: entitlement,
     access: access,
     ads: AdService(access: access),
+    pdfExport: PdfExportService(
+      fontLoader: testFontLoader,
+      temporaryDirectoryProvider: () async => directory,
+    ),
   );
 }
 

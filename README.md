@@ -11,7 +11,9 @@ Uygulamanın iki kullanım seviyesi vardır: **MetinCep Free** (günlük kullan�
 - **Reklam gösterilmez.** Reklam altyapısı hazırdır ama reklam SDK'sı eklenmemiştir.
 - Pro özelliklerini geliştirme sırasında denemek için yalnızca debug derlemede çalışan bir **Mock Pro** anahtarı vardır; release APK'da bulunmaz.
 
-Ayrıntılar: [MetinCep Free ve Pro](#9a-metincep-free-ve-pro).
+**El yazısı hakkında dürüst not:** Uygulamada bir "el yazısı modu" vardır; fotoğrafı OCR öncesi temizler (gri tonlama, kontrast, eğiklik düzeltmesi). Ancak tanıma yine cihazdaki Google ML Kit ile yapılır ve ML Kit **basılı metin** için tasarlanmıştır. Fotoğraftan el yazısı okuyan, çevrimdışı, ücretsiz ve Türkçe destekli ayrı bir motor bu sürüme eklenmemiştir. Bu yüzden el yazısı desteği **PARTIAL**'dır: düzgün ve büyük el yazısında sonuç alınabilir, bitişik/eğik yazıda alınamayabilir. Kesinlik garantisi verilmez.
+
+Ayrıntılar: [MetinCep Free ve Pro](#9a-metincep-free-ve-pro) · [OCR boru hattı](#6-ocr-sistemi) · [PDF çıktısı](#7b-pdf-çıktısı-metin-fotoğraf-tablo).
 
 | Özellik | Durum (V1) |
 |---|---|
@@ -24,6 +26,11 @@ Ayrıntılar: [MetinCep Free ve Pro](#9a-metincep-free-ve-pro).
 | Geçmiş: listeleme, Türkçe uyumlu arama, tekrar açma, silme | ✅ |
 | Ayarlar: tema (Sistem / Açık / Koyu), gizlilik, hakkında | ✅ |
 | Ek Android izni | ❌ Gerekmez |
+| OCR karakter düzeltme (ME2AR → MEZAR, 5ELAM → SELAM) — sayı/tarih/telefon/para korunur | ✅ |
+| Ham OCR metnini saklama ve ona geri dönme | ✅ |
+| Tablo algılama (satır/kolon/hücre) + düzenlenebilir tablo + tablo PDF | ✅ |
+| Metin → PDF, Fotoğraf → PDF, Çoklu fotoğraf → tek PDF | ✅ |
+| El yazısı modu (ön işleme + eğiklik düzeltme) | ⚠️ **PARTIAL** — aşağıya bakın |
 | MetinCep Free / Pro erişim altyapısı (limitler, Pro ekranı, Mock Pro) | ✅ |
 | Google Play ile Pro satın alma | ⏳ Sonraki aşama — **şu anda ödeme alınmaz** |
 | Reklam (AdMob) | ⏳ Sonraki aşama — **şu anda reklam SDK'sı yok** |
@@ -39,6 +46,8 @@ Ayrıntılar: [MetinCep Free ve Pro](#9a-metincep-free-ve-pro).
 5. [Kullanılan paketler](#5-kullanılan-paketler)
 6. [OCR sistemi](#6-ocr-sistemi)
 7. [PDF sistemi](#7-pdf-sistemi)
+8. [Veri saklama ve gizlilik](#8-veri-saklama-ve-gizlilik)
+7B. [PDF çıktısı (metin, fotoğraf, tablo)](#7b-pdf-çıktısı-metin-fotoğraf-tablo)
 8. [Veri saklama ve gizlilik](#8-veri-saklama-ve-gizlilik)
 9. [İzinler](#9-izinler)
 9A. [MetinCep Free ve Pro](#9a-metincep-free-ve-pro)
@@ -73,7 +82,7 @@ Bilgisayarınıza Flutter kurmadan APK almak için projede hazır bir GitHub Act
    - Sayfanın altındaki **Artifacts** bölümünden **MetinCep-APK** dosyasını indirin.
 5. İndirilen ZIP içindeki `app-release.apk` dosyasını telefona aktarın ve açın. Android "bilinmeyen kaynaklardan yükleme" izni isteyebilir; bu izin yalnızca dosyayı açtığınız uygulama (ör. Dosyalar) için verilir.
 
-> **Yeşil / kırmızı ne anlama gelir?** Kalite kontrol adımları (analiz, test, güvenlik doğrulaması) APK üretimini engellemez: hepsi çalışır, APK yine yüklenir. Ancak adımlardan biri bile başarısızsa iş akışı sonunda **kırmızı** işaretlenir. Yani kırmızı bir işte de indirilebilir bir APK bulabilirsiniz, ama o APK'da bilinen bir sorun vardır: özet tablosundaki FAIL satırına ve ilgili adımın günlüğüne bakın.
+> **Yeşil / kırmızı ne anlama gelir?** Kalite kontrol adımları **kapı** görevi görür: `flutter analyze` veya `flutter test` başarısız olursa iş akışı orada durur, **kırmızı** olur ve release APK üretilmez. Özet tablosunda kırılan adım `FAIL`, sırası gelmeyen adımlar `ATLANDI` görünür. Hata gizlenmez (`continue-on-error` kullanılmaz). Yalnızca release derlemesinin kendisi kırılırsa teşhis için bir debug APK yüklenir; bu APK yayına uygun değildir.
 >
 > Release APK hiç üretilemezse iş akışı yedek olarak `app-debug.apk` üretir. Debug APK de telefona kurulabilir, yalnızca biraz daha büyük ve yavaştır.
 
@@ -152,7 +161,11 @@ Her paket bir ihtiyacı karşıladığı için eklendi; durum yönetimi, veritab
 | `file_picker` | `>=8.1.0 <11.0.0` | PDF seçme ve TXT dosyasını kullanıcının seçtiği konuma kaydetme |
 | `share_plus` | `>=11.0.0 <14.0.0` | Android paylaşım menüsü |
 | `path_provider` | `^2.1.4` | Uygulama klasörleri (kayıtlar, geçici dosyalar) |
+| `pdf` | `>=3.11.0 <3.13.0` | PDF **oluşturma** (metin/fotoğraf/tablo). Saf Dart, çevrimdışı. Üst sınır bilinçli: 3.13+ Dart 3.12 ister, bu proje Flutter 3.35 (Dart 3.9) ile çalışır |
+| `image` | `>=4.2.0 <5.0.0` | El yazısı ön işleme (gri tonlama, kontrast, eğiklik) ve PDF için fotoğraf ölçekleme. Saf Dart |
 | `flutter_localizations` | SDK | Türkçe arayüz metinleri (iletişim kutuları, lisans sayfası vb.) |
+
+Gömülü yazı tipi: `assets/fonts/DejaVuSans.ttf` (lisansı `assets/fonts/DejaVuSans-LICENSE.txt`). PDF'in yerleşik yazı tipleri **ş, ğ, İ, ı** harflerini içermediği için Türkçe çıktı almak üzere gömülmüştür. İnternetten font indirilmez.
 
 API uyumluluğu, bu aralıklardaki paketlerin kaynak koduyla karşılaştırılarak kontrol edildi (ör. `PdfPage.render`, `PdfImage.format`, `PdfPasswordException`, `SharePlus.instance.share`, `FilePicker.platform.saveFile`).
 
@@ -169,6 +182,56 @@ API uyumluluğu, bu aralıklardaki paketlerin kaynak koduyla karşılaştırıla
 - **Düşük RAM'li telefonlar:** Android kamera açıkken uygulamayı kapatırsa, uygulama tekrar açıldığında çekilen fotoğraf kurtarılıp işlenir (`retrieveLostData`).
 
 **Daha iyi OCR için ipuçları:** Belgeyi düz bir zemine koyun, gölge düşürmeyin, telefonu belgeye paralel tutun, yazı ekranın büyük kısmını kaplasın.
+
+### 6.1 OCR boru hattı
+
+```text
+GÖRÜNTÜ
+  ↓  (yalnızca el yazısı modunda) ÖN İŞLEME: gri tonlama → kontrast → eğiklik düzeltme
+OCR (ML Kit, cihaz üzerinde)
+  ↓  satır + kelime koordinatları + güven değeri korunur
+KARAKTER NORMALİZASYONU  (bağlam kontrollü, ham metin ayrıca saklanır)
+  ↓
+TABLO ALGILAMA  (güvenilirse yapısal tablo, değilse düz metin)
+  ↓
+SONUÇ → Düzenleyici / Geçmiş / TXT / PDF
+```
+
+OCR sonucu yalnızca `String` olarak taşınmaz: `OcrPage → OcrBlock → OcrLine → OcrWord` yapısında metin, sınır kutuları (left/right/top/bottom), güven değeri ve sayfa bilgisi korunur. Tablo algılama ve normalizasyon bu veriye dayanır.
+
+### 6.2 Karakter düzeltme (Z↔2, S↔5)
+
+OCR'ın sık karıştırdığı rakam/harf çiftleri **bağlam kontrollü** düzeltilir. Global "her 2'yi Z yap" değiştirmesi yapılmaz.
+
+| Girdi | Sonuç | Neden |
+|---|---|---|
+| `ME2AR` | `MEZAR` | Rakamın iki yanı da harf, jetonun %80'i harf |
+| `5ELAM` | `SELAM` | Jeton başında, sonraki karakter harf |
+| `İ5TANBUL` | `İSTANBUL` | Türkçe harfler korunur |
+| `2025`, `1250` | değişmez | Harf yok |
+| `02.05.2026`, `11/09/2026`, `15:25` | değişmez | Tarih / saat kalıbı |
+| `5551234567`, `0555 123 45 67` | değişmez | Telefon kalıbı |
+| `2500 TL`, `12.500,50`, `%20` | değişmez | Para / yüzde / binlik ayraç |
+| `A2B5C9`, `ABC-2025-5`, `TR520006` | değişmez | Alfanümerik kod: harf oranı düşük |
+| `KOD25`, `PLAKA25ABC` | değişmez | Rakamın komşusu rakam |
+
+Bir rakam ancak şu koşulların **tamamı** sağlanırsa harfe çevrilir: korumalı kalıba uymuyor, jetonda en az 3 harf var, harf oranı ≥ %60, rakam oranı ≤ %40, rakamın iki komşusu da harf (jeton başı/sonunda tek komşu), ve OCR güven değeri 0,35'in altında değil. Güven düşükse **ham sonuç korunur** — yanlış düzeltme riski alınmaz.
+
+Ham metin her zaman ayrıca saklanır (`ExtractionResult.rawText`). Sonuç ekranında "N düzeltme · ham metne dön" etiketiyle tek dokunuşla ham OCR metnine dönülebilir (geri alınabilir). Böylece hatalı bir otomatik düzeltme veri kaybına yol açmaz.
+
+### 6.3 El yazısı modu (PARTIAL)
+
+Ayarlar → **El yazısı modu** açıldığında fotoğraf OCR'dan önce arka planda (isolate) hazırlanır: EXIF yönü uygulanır, gri tonlamaya çevrilir, kontrast artırılır ve yatay izdüşüm yöntemiyle ±4° aralığında eğiklik ölçülüp düzeltilir. Basılı metin modunda görüntüye **hiç dokunulmaz** (V1 davranışı korunur).
+
+Dürüst durum: tanıma motoru yine ML Kit'tir, yani el yazısı için tasarlanmamıştır. Offline, ücretsiz ve Türkçe destekli ayrı bir el yazısı motoru **eklenmemiştir**. Mod, okunabilirliği artırmaya çalışır; sonuç garanti edilmez. Motor bulunamazsa/başarısız olursa akış sessizce normal OCR'a döner.
+
+### 6.4 Tablo algılama
+
+Kelime koordinatlarından tablo çıkarılır: kelimeler dikey merkezlerine göre satırlara gruplanır, satır içinde yakın kelimeler tek hücrede birleştirilir (`2500` + `TL` → `2500 TL`), hücre sol kenarları kümelenerek kolonlar bulunur ve doluluk + satır tutarlılığı + kolon kullanımından 0–1 arası güven puanı hesaplanır.
+
+Güven 0,6'nın altındaysa **tablo hiç oluşturulmaz** ve uygulama düz metne döner. Normal paragraflar, tek kolonlu listeler ve dağınık yerleşimler bu sayede yanlışlıkla tablo sayılmaz. Tablo çizgileri kullanılmaz: ML Kit çizgi bilgisi vermediği için sahte çizgi üretmek yerine hizalama esas alınır.
+
+Tablo bulunduğunda sonuç ekranında "Tablo: 3 satır × 3 kolon" etiketi çıkar. Etiket, hücrelerin düzenlenebildiği ayrı bir ekran açar; oradan tablo PDF'e aktarılabilir veya hizalanmış düz metne dönüştürülebilir. Ana düzenleyici değişmez, tablo algılanmayan belgelerde arayüz aynı kalır.
 
 ## 7. PDF sistemi
 
@@ -189,6 +252,23 @@ Her sayfa **tek tek** işlenir; bütün sayfalar aynı anda RAM'e alınmaz.
    Boş sayfalar `(Bu bölümde metin bulunamadı)` olarak işaretlenir.
 
 Şifreli PDF'ler için ayrı bir mesaj gösterilir (V1'de parola sorulmaz).
+
+Taranmış sayfalarda OCR sonrası karakter normalizasyonu ve tablo algılama uygulanır. Metin katmanı olan sayfalara **uygulanmaz**: o metin OCR tahmini değil, birebir doğrudur.
+
+## 7B. PDF çıktısı (metin, fotoğraf, tablo)
+
+Tamamen çevrimdışıdır. Yazı tipi uygulamanın içinde gömülüdür; hiçbir ağ isteği yapılmaz.
+
+| Tür | Nereden | Davranış |
+|---|---|---|
+| **Metin → PDF** | Sonuç ekranı → "PDF olarak kaydet" | A4 dikey, başlık, sayfa numarası, otomatik sayfalama. Satırlar tek tek yerleştirildiği için taşma ve boş sayfa oluşmaz |
+| **Tablo → PDF** | Sonuç ekranı veya tablo ekranı | Gerçek PDF tablosu: kenarlıklar, hücreler, başlık satırı. Uzun tablo sayfalara bölünür ve **başlık satırı her sayfada tekrarlanır**. 5+ kolonlu tablo yatay (landscape) sayfaya basılır |
+| **Fotoğraf → PDF** | Ana ekran → "Fotoğraflardan PDF" | Her fotoğraf bir sayfa. Sıra, en boy oranı ve EXIF yönü korunur; dikey fotoğraf dikey, yatay fotoğraf yatay sayfaya |
+| **Çoklu fotoğraf → tek PDF** | Aynı yer, birden fazla seçim | Fotoğraflar **tek tek** işlenir (hepsi aynı anda RAM'e alınmaz), uzun kenar 1754 piksele indirilir |
+
+PDF oluşturulduktan sonra **Cihaza kaydet** (Android "Farklı kaydet", izin gerekmez) veya **Paylaş** seçilir. Boş içerikten PDF üretilmez; hata durumunda yarım dosya bırakılmaz ve **kota harcanmaz**.
+
+Tablo güvenilir algılanmadıysa PDF oluşturma durmaz: düzenlenen metin normal metin PDF'i olarak yazılır. Kullanıcının verisi hiçbir durumda kaybolmaz.
 
 ## 8. Veri saklama ve gizlilik
 
@@ -225,6 +305,7 @@ Her sayfa **tek tek** işlenir; bütün sayfalar aynı anda RAM'e alınmaz.
 | PDF sayfa sınırı | PDF başına **10** sayfa (fazlası için "İlk 10 sayfayı işle" seçeneği) | Sınırsız |
 | Toplu fotoğraf OCR | Tek seferde **3** fotoğraf (fazlası için "İlk 3 fotoğrafı işle") | Sınırsız |
 | PDF dosya boyutu | En fazla **25 MB** | Sınırsız |
+| PDF oluşturma (metin / fotoğraf / tablo → PDF) | Günde **2** PDF | Sınırsız |
 | Düzenleme, kopyalama, paylaşma, TXT kaydetme | ✅ | ✅ |
 | Geçmiş, arama, silme, tema, gizlilik | ✅ | ✅ |
 | Çevrimdışı çalışma | ✅ | ✅ |
@@ -232,6 +313,8 @@ Her sayfa **tek tek** işlenir; bütün sayfalar aynı anda RAM'e alınmaz.
 
 Sayım kuralları:
 - Bir kamera çekimi veya bir galeri seçimi **1 OCR işlemi** sayılır (toplu seçim de 1).
+- Bir PDF oluşturma **1 PDF çıktı işlemi** sayılır; OCR ve PDF okuma haklarından düşmez.
+- El yazısı modu ve tablo algılama **ayrı kota tüketmez**; normal OCR kuralına tabidir.
 - Bir PDF **1 PDF işlemi** sayılır; taranmış sayfalar OCR'dan geçse bile OCR hakkından düşmez.
 - Hak yalnızca işlem **başarıyla bittiğinde** harcanır; hata, iptal ve "metin bulunamadı" sayılmaz.
 - Pro kullanımı Free sayacına yazılmaz.
@@ -260,6 +343,15 @@ Ekranlar ──► FeatureAccessService ──┬──► EntitlementService �
 | `core/constants/plan_limits.dart` | `PlanLimits`, `FreeLimits`, `ProLimits` |
 | `core/constants/purchase_products.dart` | `metincep_pro_monthly`, `metincep_pro_yearly`, `metincep_pro_lifetime` (satın alınabilir olarak gösterilmez) |
 | `core/constants/ad_config.dart` | Tam ekran reklam sıklık sınırları |
+| `core/utils/character_normalizer.dart` | Bağlam kontrollü Z↔2 / S↔5 düzeltmesi |
+| `core/utils/table_detector.dart` | Kelime koordinatlarından tablo çıkarma + güven puanı |
+| `models/ocr_table.dart` | `OcrTable` / `OcrTableRow` / `OcrTableCell` |
+| `models/ocr_mode.dart` | Basılı metin / el yazısı modu |
+| `services/ocr_pipeline.dart` | OCR sonrası normalizasyon + tablo algılama |
+| `services/image_preprocessor.dart` | El yazısı ön işleme, eğiklik düzeltme (isolate) |
+| `services/pdf_export_service.dart` | Metin / fotoğraf / tablo → PDF |
+| `screens/pdf/pdf_export_flow.dart` | PDF kota kapısı, oluştur, kaydet/paylaş |
+| `screens/result/table_preview_screen.dart` | Düzenlenebilir tablo ekranı |
 | `models/subscription_model.dart` | `PlanTier`, `EntitlementSource`, `Entitlement` |
 | `models/usage_model.dart` | `DailyUsage` |
 | `services/entitlement_service.dart` | Free / Pro durumunun tek kaynağı; Mock Pro |
@@ -413,7 +505,7 @@ flutter build apk --release
 bash tool/verify_release_guards.sh build/app/outputs/flutter-apk/app-release.apk
 ```
 
-Aynı adımlar GitHub Actions'ta her derlemede otomatik çalışır ve iş akışı özetinde **PASS/FAIL tablosu** olarak raporlanır. Bir adım başarısız olursa APK yine yüklenir, ancak iş akışı kırmızı işaretlenir; sessizce geçmez.
+Aynı adımlar GitHub Actions'ta her derlemede otomatik çalışır ve iş akışı özetinde **PASS/FAIL tablosu** olarak raporlanır. Adımlar kapı olarak kurulmuştur: biri başarısız olursa iş akışı orada durur ve kırmızı olur; başarısız testin üzerine release APK üretilmez, hata `continue-on-error` ile gizlenmez.
 
 | Dosya | Kapsam |
 |---|---|
@@ -426,6 +518,12 @@ Aynı adımlar GitHub Actions'ta her derlemede otomatik çalışır ve iş akı�
 | `test/monetization/feature_access_service_test.dart` | Free OCR/PDF limitleri, sayfa/toplu/boyut sınırları, Pro'da tüm özellikler ve reklamsızlık, Pro kullanımının sayılmaması, Mock Pro (debug) ve release koşulu, satın alma hatası |
 | `test/monetization/ad_service_test.dart` | NoOp sağlayıcı, Pro'da reklam kapalı, yerleşim kuralları, tam ekran sıklık sınırı |
 | `test/extraction/extraction_guards_test.dart` | Fotoğrafsız istek, baştan iptal (OCR hiç çalışmaz), geçersiz / olmayan / boş PDF, iptal jetonu — hepsi hata yolları olduğu için kota harcanmaz |
+| `test/ocr/character_normalizer_test.dart` | ME2AR → MEZAR, 5ELAM → SELAM; sayı, tarih, saat, telefon, para, yüzde, alfanümerik kod ve Türkçe harflerin korunması; güven eşiği |
+| `test/ocr/table_detector_test.dart` | 2/3/5 kolonlu tablolar, eksik hücre, Türkçe + tarih + para hücreleri, paragraf ve dağınık yerleşimde tablo üretilmemesi, hizalı metne dönüşüm |
+| `test/ocr/ocr_pipeline_test.dart` | Ham/düzeltilmiş metnin ayrı tutulması, tablo hücrelerinin metinle tutarlılığı, düşük güvende ham metnin korunması |
+| `test/ocr/image_preprocessor_test.dart` | Eğiklik tahmini (düz, +3°, −2°), gri tonlama, büyük görüntünün küçültülmesi, bozuk dosyada çökmeme, basılı modda dokunulmaması |
+| `test/pdf/pdf_export_service_test.dart` | Geçerli PDF üretimi, gömülü Türkçe yazı tipi, uzun metin/tablonun sayfalara bölünmesi, geniş tabloda yatay sayfa, dikey/yatay fotoğraf, çoklu fotoğraf sayfa sayısı, boş içerikte hata |
+| `test/monetization/pdf_export_quota_test.dart` | Free 2/gün PDF çıktısı, kotaların birbirini etkilememesi, başarısız işlemde kota harcanmaması, gün dönümünde yenilenme, Pro'da sınırsızlık, eski JSON ile geriye uyumluluk |
 | `test/widget/pro_widget_test.dart` | Ana ekran Pro kartı, Ayarlar Free/Pro, limit penceresi (İptal / Pro'yu İncele), Pro ekranı "Yakında", Mock Pro anahtarı |
 
 Not: Kotanın yalnızca başarılı işlemde harcanması kuralı iki katmanda doğrulanır — hata yolları yukarıdaki `extraction_guards` testleriyle, sayaç davranışı `feature_access_service` testleriyle. Bu ikisinin birleştiği yer (`ProcessingScreen`) gerçek OCR gerektirdiği için cihazda test edilir (TEST_PLANI P4).
@@ -436,9 +534,12 @@ Kamera, gerçek OCR, PDF çizimi, paylaşım ve dosya kaydetme platform bileşen
 
 - **Pro satın alma yok:** Google Play Billing sonraki aşamadadır; bu sürümde herkes Free'dir (debug derlemede Mock Pro hariç).
 - **Free sayaçları cihazdadır:** Uygulama verisini temizlemek sayaçları sıfırlar; gerçek koruma sunucu gerektirir (bkz. 9A).
-- **Doğrulama durumu:** Kod, geliştirme ortamında Flutter SDK indirilemediği için yazıldığı yerde derlenemedi. Paket API'leri kaynak kodlarıyla karşılaştırıldı ve statik kontroller yapıldı; ilk `flutter analyze`, `flutter test` ve cihaz testleri sizin ortamınızda veya GitHub Actions'ta yapılacaktır. GitHub Actions bu üç komutu ve güvenlik doğrulamasını her derlemede çalıştırır; sonuçları iş akışı özetindeki PASS/FAIL tablosundan kontrol edin. Adımlardan biri başarısız olsa bile APK üretilip yüklenir, ancak iş akışı kırmızı işaretlenir.
-- **El yazısı** güvenilir biçimde okunmaz; ML Kit basılı metin için tasarlanmıştır.
-- **Tablolar** satır satır metin olarak çıkar; sütun hizası korunmaz.
+- **Doğrulama durumu:** Kod, geliştirme ortamında Flutter SDK indirilemediği için yazıldığı yerde derlenemedi. Paket API'leri kaynak kodlarıyla karşılaştırıldı ve statik kontroller yapıldı; ilk `flutter analyze`, `flutter test` ve cihaz testleri sizin ortamınızda veya GitHub Actions'ta yapılacaktır. GitHub Actions bu üç komutu ve güvenlik doğrulamasını her derlemede çalıştırır; sonuçları iş akışı özetindeki PASS/FAIL tablosundan kontrol edin. Analiz veya testler başarısız olursa iş akışı orada durur ve release APK üretilmez.
+- **El yazısı (PARTIAL):** Ayrı bir el yazısı motoru yoktur. "El yazısı modu" yalnızca görüntüyü temizler; tanımayı basılı metin için tasarlanmış ML Kit yapar. Düzgün ve büyük el yazısında sonuç alınabilir, bitişik/eğik yazıda alınamayabilir. Kesinlik garantisi verilmez.
+- **Tablo algılama sezgiseldir:** Hizalamaya dayanır, tablo çizgilerini kullanmaz. Kolonları iç içe geçmiş, hücrelerinde çok satırlı uzun metin olan veya birleştirilmiş hücreli tablolarda güven düşer ve uygulama bilinçli olarak düz metne döner. Kesinlik garantisi verilmez.
+- **Karakter düzeltme yalnızca 2↔Z ve 5↔S çiftini kapsar.** Liste bilinçli olarak kısadır; her yeni eşleme yanlış düzeltme riskidir. Yanlış bir düzeltme olursa ham metne dönülebilir.
+- **Eğiklik düzeltme ±4° ile sınırlıdır** ve perspektif (trapez) düzeltmesi yoktur; çok eğik veya açıdan çekilmiş fotoğraflarda sonuç iyileşmez.
+- **PDF metin çıktısında** boşluk içermeyen çok uzun tek bir kelime satır sonunda kırpılabilir (kelime bazlı satır kaydırma).
 - **Kırpma, perspektif düzeltme, kontrast artırma** V1'de yok (OCR kararlılığı öncelikli tutuldu). Sistem kamerası/galeri düzenleyicisiyle önceden kırpılabilir.
 - **Şifreli PDF'ler** açılmaz.
 - **Latin dışı alfabeler** (Arapça, Kiril, Çince vb.) okunmaz.

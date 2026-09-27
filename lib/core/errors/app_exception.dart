@@ -36,4 +36,10 @@ class ErrorMessages {
       'Belge silinemedi. Lütfen tekrar deneyin.';
   static const String shareFailed = 'Paylaşım başlatılamadı.';
   static const String fileSaveFailed = 'TXT dosyası kaydedilemedi.';
+  static const String pdfCreateFailed =
+      'PDF oluşturulamadı. Lütfen tekrar deneyin.';
+  static const String pdfEmptyContent =
+      "PDF'e aktarılacak içerik yok.";
+  static const String pdfImageReadFailed =
+      'Fotoğraf okunamadı. Farklı bir fotoğraf deneyin.';
 }
