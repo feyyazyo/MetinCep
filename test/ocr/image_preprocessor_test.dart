@@ -91,6 +91,39 @@ void main() {
     });
   });
 
+  group('İkili (siyah-beyaz) ikinci geçiş', () {
+    test('çıktı yalnızca siyah ve beyaz içerir', () {
+      final binary =
+          ImagePreprocessor.binarizeForHandwriting(buildDocument());
+
+      var checked = 0;
+      for (var y = 0; y < binary.height; y += 7) {
+        for (var x = 0; x < binary.width; x += 11) {
+          final value = binary.getPixel(x, y).luminanceNormalized.toDouble();
+          expect(value < 0.02 || value > 0.98, isTrue,
+              reason: '($x,$y) ikili değil: $value');
+          checked++;
+        }
+      }
+      expect(checked, greaterThan(100));
+    });
+
+    test('metin satırları ikili çıktıda korunur', () {
+      final binary = ImagePreprocessor.binarizeForHandwriting(buildDocument());
+      // buildDocument 40, 90, 140 taban çizgilerine 3 piksel kalınlığında
+      // koyu satırlar çizer; eşiklemeden sonra siyah kalmalılar.
+      final middle = binary.width ~/ 2;
+      var darkRows = 0;
+      for (var y = 0; y < binary.height; y++) {
+        if (binary.getPixel(middle, y).luminanceNormalized < 0.5) {
+          darkRows++;
+        }
+      }
+      expect(darkRows, greaterThanOrEqualTo(6),
+          reason: 'üç satırın çoğu koyu kalmalı');
+    });
+  });
+
   group('prepare()', () {
     late Directory directory;
 
@@ -123,6 +156,49 @@ void main() {
         sourcePath: broken.path,
         targetPath: '${directory.path}/cikti.jpg',
         mode: OcrMode.handwriting,
+      );
+
+      expect(result, isNull);
+    });
+
+    test('prepareBinary ikili dosya üretir (iyileştirilmiş kaynak)', () async {
+      const preprocessor = ImagePreprocessor();
+      final source = File('${directory.path}/kaynak2.jpg')
+        ..writeAsBytesSync(img.encodeJpg(buildDocument(), quality: 95));
+      final targetPath = '${directory.path}/ikili.jpg';
+
+      final result = await preprocessor.prepareBinary(
+        sourcePath: source.path,
+        targetPath: targetPath,
+        alreadyEnhanced: true,
+      );
+
+      expect(result, targetPath);
+      final decoded = img.decodeImage(File(targetPath).readAsBytesSync());
+      expect(decoded, isNotNull);
+      // JPEG sıkıştırması uçları biraz yumuşatır; yine de iki kutupta kalmalı.
+      var extremes = 0;
+      var total = 0;
+      for (var y = 0; y < decoded!.height; y += 9) {
+        for (var x = 0; x < decoded.width; x += 13) {
+          final value = decoded.getPixel(x, y).luminanceNormalized.toDouble();
+          total++;
+          if (value < 0.15 || value > 0.85) {
+            extremes++;
+          }
+        }
+      }
+      expect(extremes / total, greaterThan(0.9));
+    });
+
+    test('prepareBinary okunamayan dosyada null döner', () async {
+      const preprocessor = ImagePreprocessor();
+      final broken = File('${directory.path}/bozuk2.jpg')
+        ..writeAsBytesSync(const [7, 7, 7]);
+
+      final result = await preprocessor.prepareBinary(
+        sourcePath: broken.path,
+        targetPath: '${directory.path}/cikti2.jpg',
       );
 
       expect(result, isNull);

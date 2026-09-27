@@ -187,12 +187,17 @@ API uyumluluğu, bu aralıklardaki paketlerin kaynak koduyla karşılaştırıla
 
 ```text
 GÖRÜNTÜ
-  ↓  (yalnızca el yazısı modunda) ÖN İŞLEME: gri tonlama → kontrast → eğiklik düzeltme
+  ↓  (yalnızca el yazısı modunda) ÖN İŞLEME
+  ↓     perspektif düzeltme (güvenilir belge dörtgeni varsa) → gri tonlama
+  ↓     → aydınlatma normalizasyonu → kontrast germe → eğiklik düzeltme
 OCR (ML Kit, cihaz üzerinde)
   ↓  satır + kelime koordinatları + güven değeri korunur
+  ↓  (el yazısında sonuç zayıfsa) İKİNCİ GEÇİŞ: gürültü azaltma + uyarlamalı eşikleme
 KARAKTER NORMALİZASYONU  (bağlam kontrollü, ham metin ayrıca saklanır)
   ↓
-TABLO ALGILAMA  (güvenilirse yapısal tablo, değilse düz metin)
+TABLO ÇİZGİSİ ARAMA  (fotoğrafta yatay/dikey çizgiler; yalnızca ipucu)
+  ↓
+TABLO ALGILAMA  (eğim düzeltme → satır → kolon → hücre → güven)
   ↓
 SONUÇ → Düzenleyici / Geçmiş / TXT / PDF
 ```
@@ -221,17 +226,71 @@ Ham metin her zaman ayrıca saklanır (`ExtractionResult.rawText`). Sonuç ekran
 
 ### 6.3 El yazısı modu (PARTIAL)
 
-Ayarlar → **El yazısı modu** açıldığında fotoğraf OCR'dan önce arka planda (isolate) hazırlanır: EXIF yönü uygulanır, gri tonlamaya çevrilir, kontrast artırılır ve yatay izdüşüm yöntemiyle ±4° aralığında eğiklik ölçülüp düzeltilir. Basılı metin modunda görüntüye **hiç dokunulmaz** (V1 davranışı korunur).
+Ayarlar → **El yazısı modu** açıldığında fotoğraf, OCR'dan önce arka planda (isolate) şu adımlardan geçer:
 
-Dürüst durum: tanıma motoru yine ML Kit'tir, yani el yazısı için tasarlanmamıştır. Offline, ücretsiz ve Türkçe destekli ayrı bir el yazısı motoru **eklenmemiştir**. Mod, okunabilirliği artırmaya çalışır; sonuç garanti edilmez. Motor bulunamazsa/başarısız olursa akış sessizce normal OCR'a döner.
+| Adım | Ne yapar | Neden gerekli |
+|---|---|---|
+| EXIF yönü + ölçekleme | Fotoğrafı doğru çevirir, 2560 px'e indirir | Yan yatmış fotoğraf hiç okunmaz |
+| Perspektif düzeltme | Güvenilir bir **belge dörtgeni** bulunursa dikdörtgene açar | Masadaki kâğıt açıyla çekilince harfler yamulur |
+| Gri tonlama | Renk bilgisini atar | Renk OCR'a katkı vermez, gürültü ekler |
+| **Aydınlatma normalizasyonu** | Her pikseli yerel arka plan ortalamasına böler | Kapı/duvarda bir köşe gölgede, diğeri güneşte olur; tek eşik çalışmaz |
+| **Kontrast germe** | Alt/üst %2'yi kırpıp histogramı yayar | Soluk kurşun kalem yazısı belirginleşir |
+| Eğiklik düzeltme | Yatay izdüşümle ±4° ölçüp döndürür | Elde tutularak çekilen fotoğraf eğik olur |
+| **İkinci geçiş** (sonuç zayıfsa) | 3×3 medyan gürültü azaltma + uyarlamalı eşikleme | Dokulu duvarda ve düşük kontrastta ikili görüntü daha iyi okunabilir |
+
+İkinci geçiş yalnızca ilk sonuç zayıfsa (12 karakterden az ya da güven < 0,5) çalışır ve **ölçülerek** kabul edilir: yeni sonuç belirgin şekilde daha çok metin ya da aynı uzunlukta daha yüksek güven vermezse ilk sonuç korunur. İki geçiş tek kullanıcı işlemidir, **ek kota tüketmez**.
+
+Basılı metin modunda görüntüye **hiç dokunulmaz** (V1 davranışı korunur): `prepare()` ilk satırda `null` döner. İki boru hattı ayrıdır.
+
+**Perspektif düzeltme = PARTIAL.** Yalnızca arka plandan ayrışan bir belge kenarı (kâğıt, pano) bulunduğunda çalışır ve şu doğrulamaları geçmek zorundadır: alan ≥ görüntünün %35'i, en/boy oranı 0,35–3,0 arası, karşıt kenarlar birbirinden en çok 2 kat farklı, dörtgen alanı sınırlayıcı kutunun ≥ %55'i. Kapıya/duvara yazılmış yazıda belge kenarı yoktur; bu durumda düzeltme **yapılmaz** ve orijinal görüntü kullanılır. Çizgili bir defter sayfasında aydınlık alan yatay şeritlere bölünür — bu şeritler en/boy kuralı sayesinde belge sayılmaz. Gerekçe: **yanlış kırpma, perspektifi hiç düzeltmemekten kötüdür.**
+
+**Dürüst durum — tanıma motoru:** Ayrı bir el yazısı tanıma motoru **yoktur**; tanıma yine ML Kit'in basılı metin modeliyle yapılır. Bu tur için seçenekler yeniden araştırıldı:
+
+| Seçenek | Durum | Neden kullanılmadı |
+|---|---|---|
+| ML Kit Digital Ink | Kullanılamaz | Fotoğraf değil, ekrana çizilen **kalem izi (stroke)** verisi ister |
+| TrOCR (small-handwritten, MIT) | Kullanılamaz | Kodlayıcı 87,8 MB + kod çözücü 146 MB ≈ **234 MB**; IAM veri kümesiyle **yalnızca İngilizce**; ayrıca satır kırpma için ek bir model gerekir |
+| PaddleOCR / PP-OCRv5 mobil | Kullanılamaz | El yazısı desteği ağırlıklı Çince/İngilizce; Latin modelleri **basılı** metin için. ONNX Runtime yerel kütüphaneleri + modeller APK'yı büyütür, resmi Flutter eklentisi yok |
+| TFLite / ONNX + IAM tabanlı CRNN-CTC | Kullanılamaz | Hazır Türkçe el yazısı modeli yok; eğitmek bu projenin kapsamı dışında |
+| Bulut / Firebase / ücretli API | **Yasak** | Kullanıcı fotoğrafları cihazdan çıkmayacak |
+
+Sonuç: **HANDWRITING = PARTIAL** olarak kalır. Ön işleme okunabilirliği artırmaya çalışır; doğruluk garanti edilmez ve sonuç hiç metin vermeyebilir. Ön işleme başarısız olursa akış sessizce orijinal görüntüyle normal OCR'a döner.
 
 ### 6.4 Tablo algılama
 
-Kelime koordinatlarından tablo çıkarılır: kelimeler dikey merkezlerine göre satırlara gruplanır, satır içinde yakın kelimeler tek hücrede birleştirilir (`2500` + `TL` → `2500 TL`), hücre sol kenarları kümelenerek kolonlar bulunur ve doluluk + satır tutarlılığı + kolon kullanımından 0–1 arası güven puanı hesaplanır.
+Gerçek cihaz testinde tablolu fotoğrafların algılanmadığı görüldü. Kök neden ölçüldü ve algoritma yeniden yazıldı.
 
-Güven 0,6'nın altındaysa **tablo hiç oluşturulmaz** ve uygulama düz metne döner. Normal paragraflar, tek kolonlu listeler ve dağınık yerleşimler bu sayede yanlışlıkla tablo sayılmaz. Tablo çizgileri kullanılmaz: ML Kit çizgi bilgisi vermediği için sahte çizgi üretmek yerine hizalama esas alınır.
+**Eski (v1) neden başarısızdı:**
 
-Tablo bulunduğunda sonuç ekranında "Tablo: 3 satır × 3 kolon" etiketi çıkar. Etiket, hücrelerin düzenlenebildiği ayrı bir ekran açar; oradan tablo PDF'e aktarılabilir veya hizalanmış düz metne dönüştürülebilir. Ana düzenleyici değişmez, tablo algılanmayan belgelerde arayüz aynı kalır.
+| Sorun | Sonuç |
+|---|---|
+| Satırlar **eğim düzeltmesi olmadan** gruplanıyordu | Elde tutularak 2–3° eğik çekilen fotoğrafta bir tablo satırı 2–3 satıra bölünüyordu (4 satırlık tablo 7 satır görünüyordu) |
+| Kolonlar **hücre sol kenarları kümelenerek** bulunuyordu | Fişlerde tutarlar **sağa dayalı** olduğu için sol kenarlar satırdan satıra kayıyor, 2 kolonluk fiş 3 kolon sanılıyordu |
+| Hücre birleştirme **sabit bir boşluk çarpanına** (1,2 × medyan yükseklik) bakıyordu | ML Kit kutu yüksekliği içeriğe göre değişir (`adet` x-yüksekliği, `Ürün` aksanlı); dar tablolarda kolonlar birleşiyor, geniş tablolarda hücreler bölünüyordu |
+| Yapı bozulduğunda güven puanı 0,6 eşiğinin hemen altına düşüyordu | Tablo **hiç** gösterilmiyordu |
+
+**Yeni (v2) boru hattı:**
+
+```text
+KELİMELER (koordinat + güven)
+  ↓ EĞİM TAHMİNİ      izdüşüm histogramı, ±6,8°; görüntü döndürülmez, koordinat yorumlanır
+SATIRLAR              eğim düzeltilmiş dikey konuma göre gruplama (0,6 × medyan yükseklik)
+  ↓ ÇİZGİ İPUCU       fotoğrafta bulunan dikey çizgiler kolon sınırı adayı olur (doğrulanır)
+KOLONLAR              **tüm satırlarda boş kalan dikey şeritler** kolon ayırıcıdır
+HÜCRELER              satır önce segmentlere bölünür, segment en çok örtüştüğü kolona atanır
+  ↓ GÜVEN             doluluk, tutarlılık, hizalama, kolon kullanımı, satır derinliği, çizgi, OCR güveni
+OcrTable  ·  eşiğin altındaysa TABLO YOK → düz metin korunur
+```
+
+Anahtar fikir **boşluk şeridi**: bir hücrenin içindeki kelime boşluğu (`2500` ile `TL` arası) başka satırlarda metinle kaplıdır, kolonlar arası boşluk ise **her satırda** boştur. Böylece çok kelimeli hücreler bölünmez, sağa dayalı kolonlar parçalanmaz ve farklı fotoğraf ölçeklerinde aynı kural çalışır. Tablonun üstündeki tek satırlık başlık ("MERMER FİYAT LİSTESİ") kolonları yok etmesin diye bir şeridi "boş" saymak için satırların en fazla %25'inin onu kaplamasına izin verilir; başlık satırı tek segment olduğu için kolonlara parçalanmaz, tek hücrede kalır.
+
+**Çizgili tablolar:** `TableLineFinder` fotoğrafta yatay/dikey çizgileri arar (gri tonlama → uyarlamalı eşikleme → koşu analizi). OpenCV gibi yerel bağımlılık eklenmedi; yalnızca `image` paketi kullanılır. Analiz **yalnızca OCR kelimelerinin kapladığı bölgede** yapılır, böylece sayfa/masa kenarı çizgi sanılmaz. Çizgiler yalnızca **ipucudur**: bir çizgi ancak kelime geometrisinin de boş bıraktığı bir x konumundaysa kolon sınırı kabul edilir, aksi halde atılır. Çizgi kanıtı güven puanını **yalnızca yükseltir**, hiçbir durumda düşürmez. Dokulu arka planda (tuğla, ahşap) 40'tan fazla çizgi bulunursa sonuç güvenilmez sayılıp tamamen yok sayılır.
+
+**Çizgisiz tablolar** aynı geometriyle algılanır: çizgi bulunamazsa boşluk şeritleri tek başına yeterlidir.
+
+**Güven ve geri dönüş:** Eşik 0,6'da tutuldu (körlemesine düşürülmedi); yeni algoritma gerçek tablolarda 0,84–1,00 aralığında puan verir. Eşiğin altında **tablo hiç oluşturulmaz** ve metin korunur — veri asla silinmez. Puan 0,35 ile 0,6 arasındaysa sonuç ekranında "Tablo algılanamadı, metin olarak gösteriliyor" bilgisi çıkar; normal paragraflarda bu bilgi de gösterilmez.
+
+Tablo bulunduğunda sonuç ekranında "Tablo: 3 satır × 3 kolon" etiketi çıkar. Etiket, hücrelerin düzenlenebildiği ayrı bir ekran açar; oradan tablo PDF'e aktarılabilir veya hizalanmış düz metne dönüştürülebilir. Ana düzenleyici değişmez, tablo algılanmayan belgelerde arayüz aynı kalır. Tablo hücreleri metinle **aynı** karakter normalizasyonundan geçer: hücrede `ME2AR`, metinde `MEZAR` olmaz.
 
 ## 7. PDF sistemi
 
@@ -259,12 +318,24 @@ Taranmış sayfalarda OCR sonrası karakter normalizasyonu ve tablo algılama uy
 
 Tamamen çevrimdışıdır. Yazı tipi uygulamanın içinde gömülüdür; hiçbir ağ isteği yapılmaz.
 
-| Tür | Nereden | Davranış |
+**Üç ayrı çıktı mantığı vardır ve birbirine karıştırılmaz:**
+
+| Mod | Nereden | PDF'in içine ne yazılır |
 |---|---|---|
-| **Metin → PDF** | Sonuç ekranı → "PDF olarak kaydet" | A4 dikey, başlık, sayfa numarası, otomatik sayfalama. Satırlar tek tek yerleştirildiği için taşma ve boş sayfa oluşmaz |
-| **Tablo → PDF** | Sonuç ekranı veya tablo ekranı | Gerçek PDF tablosu: kenarlıklar, hücreler, başlık satırı. Uzun tablo sayfalara bölünür ve **başlık satırı her sayfada tekrarlanır**. 5+ kolonlu tablo yatay (landscape) sayfaya basılır |
-| **Fotoğraf → PDF** | Ana ekran → "Fotoğraflardan PDF" | Her fotoğraf bir sayfa. Sıra, en boy oranı ve EXIF yönü korunur; dikey fotoğraf dikey, yatay fotoğraf yatay sayfaya |
-| **Çoklu fotoğraf → tek PDF** | Aynı yer, birden fazla seçim | Fotoğraflar **tek tek** işlenir (hepsi aynı anda RAM'e alınmaz), uzun kenar 1754 piksele indirilir |
+| **1. FOTOĞRAF PDF** | Ana ekran → **"Fotoğrafı PDF Yap"** | **Fotoğrafın kendisi.** Metin çıkarılmaz, OCR çalışmaz. Fotoğrafı olduğu gibi belgeye çevirmek içindir |
+| **2. METİN PDF** | Sonuç ekranı → **"Metni PDF Yap"** → "Metin olarak" | **Gerçek, seçilebilir metin.** Fotoğraf PDF'e konmaz. Kapıda "AHMET / 12.05.2026 / 3500 TL" yazıyorsa PDF'te bu satırlar kopyalanabilir metin olur |
+| **3. TABLO PDF** | Sonuç ekranı veya tablo ekranı → "Tablo olarak" | **Gerçek PDF tablosu:** satır, kolon, hücre, kenarlık. Yine metin; fotoğraf konmaz |
+
+Hangi modda olduğunuz arayüzde açıkça yazılıdır: ana ekrandaki kart "Fotoğrafı PDF Yap" (altyazı: *fotoğrafın kendisi PDF sayfası olur, metin çıkarılmaz*), sonuç ekranındaki düğme "Metni PDF Yap". Tablo algılandıysa ikisi arasında seçim penceresi çıkar ve pencerede her iki seçeneğin de gerçek metin yazdığı belirtilir. Bu ayrım otomatik testle de doğrulanır: metin ve tablo PDF'lerinde gömülü görüntü nesnesi (`/XObject`) **bulunmaz**, fotoğraf PDF'inde bulunur.
+
+Ayrıntılar:
+
+| Tür | Davranış |
+|---|---|
+| Metin → PDF | A4 dikey, başlık, sayfa numarası, otomatik sayfalama. Satırlar tek tek yerleştirildiği için taşma ve boş sayfa oluşmaz |
+| Tablo → PDF | Kenarlıklar, hücreler, gri başlık satırı. Uzun tablo sayfalara bölünür ve **başlık satırı her sayfada tekrarlanır**. 5+ kolonlu tablo yatay (landscape) sayfaya basılır |
+| Fotoğraf → PDF | Her fotoğraf bir sayfa. Sıra, en boy oranı ve EXIF yönü korunur; dikey fotoğraf dikey, yatay fotoğraf yatay sayfaya |
+| Çoklu fotoğraf → tek PDF | Fotoğraflar **tek tek** işlenir (hepsi aynı anda RAM'e alınmaz), uzun kenar 1754 piksele indirilir |
 
 PDF oluşturulduktan sonra **Cihaza kaydet** (Android "Farklı kaydet", izin gerekmez) veya **Paylaş** seçilir. Boş içerikten PDF üretilmez; hata durumunda yarım dosya bırakılmaz ve **kota harcanmaz**.
 
@@ -344,11 +415,15 @@ Ekranlar ──► FeatureAccessService ──┬──► EntitlementService �
 | `core/constants/purchase_products.dart` | `metincep_pro_monthly`, `metincep_pro_yearly`, `metincep_pro_lifetime` (satın alınabilir olarak gösterilmez) |
 | `core/constants/ad_config.dart` | Tam ekran reklam sıklık sınırları |
 | `core/utils/character_normalizer.dart` | Bağlam kontrollü Z↔2 / S↔5 düzeltmesi |
-| `core/utils/table_detector.dart` | Kelime koordinatlarından tablo çıkarma + güven puanı |
+| `core/utils/table_detector.dart` | Eğim düzeltme → satır → boşluk şeridi kolonları → hücre → güven puanı |
+| `core/utils/table_line_finder.dart` | Fotoğrafta yatay/dikey tablo çizgilerini bulma (kolon ipucu) |
+| `core/utils/image_enhancement.dart` | Aydınlatma normalizasyonu, kontrast germe, medyan gürültü azaltma, uyarlamalı eşikleme, belge dörtgeni + perspektif düzeltme |
+| `core/utils/integral_image.dart` | Toplam alan tablosu: yerel ortalamayı O(1) verir (eşikleme ve normalizasyonun temeli) |
+| `models/table_grid_lines.dart` | Bulunan tablo çizgileri (yalnızca ipucu) |
 | `models/ocr_table.dart` | `OcrTable` / `OcrTableRow` / `OcrTableCell` |
 | `models/ocr_mode.dart` | Basılı metin / el yazısı modu |
-| `services/ocr_pipeline.dart` | OCR sonrası normalizasyon + tablo algılama |
-| `services/image_preprocessor.dart` | El yazısı ön işleme, eğiklik düzeltme (isolate) |
+| `services/ocr_pipeline.dart` | OCR sonrası normalizasyon + tablo algılama + "tablo algılanamadı" geri bildirimi |
+| `services/image_preprocessor.dart` | El yazısı ön işleme (perspektif, aydınlatma, kontrast, eğiklik) + ikili ikinci geçiş, isolate |
 | `services/pdf_export_service.dart` | Metin / fotoğraf / tablo → PDF |
 | `screens/pdf/pdf_export_flow.dart` | PDF kota kapısı, oluştur, kaydet/paylaş |
 | `screens/result/table_preview_screen.dart` | Düzenlenebilir tablo ekranı |
@@ -519,11 +594,13 @@ Aynı adımlar GitHub Actions'ta her derlemede otomatik çalışır ve iş akı�
 | `test/monetization/ad_service_test.dart` | NoOp sağlayıcı, Pro'da reklam kapalı, yerleşim kuralları, tam ekran sıklık sınırı |
 | `test/extraction/extraction_guards_test.dart` | Fotoğrafsız istek, baştan iptal (OCR hiç çalışmaz), geçersiz / olmayan / boş PDF, iptal jetonu — hepsi hata yolları olduğu için kota harcanmaz |
 | `test/ocr/character_normalizer_test.dart` | ME2AR → MEZAR, 5ELAM → SELAM; sayı, tarih, saat, telefon, para, yüzde, alfanümerik kod ve Türkçe harflerin korunması; güven eşiği |
-| `test/ocr/table_detector_test.dart` | 2/3/5 kolonlu tablolar, eksik hücre, Türkçe + tarih + para hücreleri, paragraf ve dağınık yerleşimde tablo üretilmemesi, hizalı metne dönüşüm |
-| `test/ocr/ocr_pipeline_test.dart` | Ham/düzeltilmiş metnin ayrı tutulması, tablo hücrelerinin metinle tutarlılığı, düşük güvende ham metnin korunması |
-| `test/ocr/image_preprocessor_test.dart` | Eğiklik tahmini (düz, +3°, −2°), gri tonlama, büyük görüntünün küçültülmesi, bozuk dosyada çökmeme, basılı modda dokunulmaması |
+| `test/ocr/table_detector_test.dart` | 2/3/4/5 kolonlu tablolar, eksik hücre, Türkçe + tarih + para, **eğik çekilmiş tablo**, **sağa dayalı fiyat kolonu**, tam genişlik başlık satırı, çok kelimeli hücre, 12 satırlık tablo, çizgi ipuçlarının doğrulanması ve çelişen çizgilerin yok sayılması, yakın kaçırma bildirimi, düşük OCR güveni |
+| `test/ocr/table_line_finder_test.dart` | Kenarlıklı tabloda yatay/dikey çizgilerin bulunması, kalın çizginin tek çizgi sayılması, çizgisiz/düz/koyu görüntüde çizgi bulunmaması |
+| `test/ocr/image_enhancement_test.dart` | Gölgeli yüzeyin düzleşmesi, kontrast germe, tuz-biber gürültüsünün silinmesi, uyarlamalı eşiklemenin iki uçta da çalışması, belge dörtgeni köşeleri, duvar ve çizgili sayfada **kırpma yapılmaması** |
+| `test/ocr/ocr_pipeline_test.dart` | Ham/düzeltilmiş metnin ayrı tutulması, tablo hücrelerinin metinle tutarlılığı, düşük güvende ham metnin korunması, çizgi ipucunun güveni yükseltmesi, tablo bulunamadığında metnin kaybolmaması |
+| `test/ocr/image_preprocessor_test.dart` | Eğiklik tahmini (düz, +3°, −2°), gri tonlama, büyük görüntünün küçültülmesi, bozuk dosyada çökmeme, basılı modda dokunulmaması, ikili ikinci geçişin siyah-beyaz üretmesi |
 | `test/ocr/image_decoding_test.dart` | Bozuk, boş, olmayan ve fotoğraf olmayan dosyalarda güvenli çözme: istisna atılmaz, `null` döner (gerileme testi) |
-| `test/pdf/pdf_export_service_test.dart` | Geçerli PDF üretimi, gömülü Türkçe yazı tipi, uzun metin/tablonun sayfalara bölünmesi, geniş tabloda yatay sayfa, dikey/yatay fotoğraf, çoklu fotoğraf sayfa sayısı, boş içerikte hata |
+| `test/pdf/pdf_export_service_test.dart` | Geçerli PDF üretimi, gömülü Türkçe yazı tipi, uzun metin/tablonun sayfalara bölünmesi, geniş tabloda yatay sayfa, dikey/yatay fotoğraf, çoklu fotoğraf sayfa sayısı, boş içerikte hata, **metin/tablo PDF'inde gömülü fotoğraf bulunmaması, fotoğraf PDF'inde bulunması** |
 | `test/monetization/pdf_export_quota_test.dart` | Free 2/gün PDF çıktısı, kotaların birbirini etkilememesi, başarısız işlemde kota harcanmaması, gün dönümünde yenilenme, Pro'da sınırsızlık, eski JSON ile geriye uyumluluk |
 | `test/widget/pro_widget_test.dart` | Ana ekran Pro kartı, Ayarlar Free/Pro, limit penceresi (İptal / Pro'yu İncele), Pro ekranı "Yakında", Mock Pro anahtarı |
 
@@ -533,20 +610,16 @@ Kamera, gerçek OCR, PDF çizimi, paylaşım ve dosya kaydetme platform bileşen
 
 ## 12. Bilinen sınırlamalar
 
-- **Pro satın alma yok:** Google Play Billing sonraki aşamadadır; bu sürümde herkes Free'dir (debug derlemede Mock Pro hariç).
-- **Free sayaçları cihazdadır:** Uygulama verisini temizlemek sayaçları sıfırlar; gerçek koruma sunucu gerektirir (bkz. 9A).
-- **Doğrulama durumu:** Kod, geliştirme ortamında Flutter SDK indirilemediği için yazıldığı yerde derlenemedi. Paket API'leri kaynak kodlarıyla karşılaştırıldı ve statik kontroller yapıldı; ilk `flutter analyze`, `flutter test` ve cihaz testleri sizin ortamınızda veya GitHub Actions'ta yapılacaktır. GitHub Actions bu üç komutu ve güvenlik doğrulamasını her derlemede çalıştırır; sonuçları iş akışı özetindeki PASS/FAIL tablosundan kontrol edin. Analiz veya testler başarısız olursa iş akışı orada durur ve release APK üretilmez.
-- **El yazısı (PARTIAL):** Ayrı bir el yazısı motoru yoktur. "El yazısı modu" yalnızca görüntüyü temizler; tanımayı basılı metin için tasarlanmış ML Kit yapar. Düzgün ve büyük el yazısında sonuç alınabilir, bitişik/eğik yazıda alınamayabilir. Kesinlik garantisi verilmez.
-- **Tablo algılama sezgiseldir:** Hizalamaya dayanır, tablo çizgilerini kullanmaz. Kolonları iç içe geçmiş, hücrelerinde çok satırlı uzun metin olan veya birleştirilmiş hücreli tablolarda güven düşer ve uygulama bilinçli olarak düz metne döner. Kesinlik garantisi verilmez.
-- **Karakter düzeltme yalnızca 2↔Z ve 5↔S çiftini kapsar.** Liste bilinçli olarak kısadır; her yeni eşleme yanlış düzeltme riskidir. Yanlış bir düzeltme olursa ham metne dönülebilir.
-- **Eğiklik düzeltme ±4° ile sınırlıdır** ve perspektif (trapez) düzeltmesi yoktur; çok eğik veya açıdan çekilmiş fotoğraflarda sonuç iyileşmez.
-- **PDF metin çıktısında** boşluk içermeyen çok uzun tek bir kelime satır sonunda kırpılabilir (kelime bazlı satır kaydırma).
-- **Kırpma, perspektif düzeltme, kontrast artırma** V1'de yok (OCR kararlılığı öncelikli tutuldu). Sistem kamerası/galeri düzenleyicisiyle önceden kırpılabilir.
-- **Şifreli PDF'ler** açılmaz.
-- **Latin dışı alfabeler** (Arapça, Kiril, Çince vb.) okunmaz.
-- **Çok uzun metinler** (yüz binlerce karakter) düzenleyicide yavaşlayabilir; 100.000 karakteri aşan metin paylaşılırken otomatik olarak TXT dosyası olarak gönderilir.
-- **APK boyutu:** ML Kit modeli ve PDFium tüm işlemci türleri için gömülü olduğundan tek APK büyüktür; `--split-per-abi` ile küçülür.
-- 7.0–9 sürümlü Android cihazlar destekleniyor ancak test önceliği Android 10+.
+- **El yazısı (PARTIAL):** Ayrı bir el yazısı tanıma motoru yoktur. Ön işleme (perspektif, aydınlatma, kontrast, eğiklik, ikili ikinci geçiş) okunabilirliği artırmaya çalışır; tanıma yine ML Kit'in basılı metin modeliyle yapılır. Sonuç düşük doğrulukta olabilir veya hiç metin çıkmayabilir. Neden başka motor kullanılmadığı §6.3'te tablo hâlinde açıklanmıştır.
+- **Perspektif düzeltme (PARTIAL):** Yalnızca arka plandan ayrışan bir belge kenarı bulunduğunda çalışır. Kapı, duvar veya dokulu zeminde düzeltme yapılmaz, orijinal görüntü kullanılır. Bu bilinçli bir karardır: yanlış kırpma tüm metni kaybettirir.
+- **Tablo algılama sezgiseldir:** Boşluk şeritleri ve (varsa) çizgiler kullanılır; kesinlik garantisi verilmez. Birleşik hücreli (merged cell) tablolar, kenarlıksız **ve** kolon boşluğu medyan harf yüksekliğinin 0,7 katından küçük olan çok sıkışık tablolar ve hücre içeriği birden fazla satıra taşan tablolar kaçabilir. Kaçtığında uygulama düz metin verir ve "Tablo algılanamadı" bilgisi gösterir — **veri kaybolmaz**.
+- **Tablo çizgisi arama yalnızca fotoğraf akışında çalışır.** PDF'ten çıkarılan taranmış sayfalarda tablo, çizgi ipucu olmadan yalnızca geometriyle aranır.
+- OCR doğruluğu fotoğraf kalitesine bağlıdır: bulanık, çok karanlık veya aşırı eğik fotoğraflarda sonuç zayıf olur.
+- El yazısı ön işleme ve tablo çizgisi arama, büyük fotoğraflarda birkaç saniye sürebilir (arka plan isolate'inde çalışır, arayüz donmaz).
+- Sayfa düzeni (kolonlu dergi sayfası gibi) korunmaz; metin satır satır alınır.
+- Çok büyük PDF'lerde (50+ sayfa) işlem yavaştır; sayfalar tek tek işlenir.
+- Gerçek satın alma (Google Play Billing) ve gerçek reklam (AdMob SDK) **bağlanmamıştır**; Pro yalnızca debug derlemede Mock Pro ile denenir.
+- PDF çıktısında kalın yazı tipi varyantı gömülmedi (APK boyutu); başlıklar punto ve arka planla ayrışır.
 
 ## 13. Sorun giderme
 

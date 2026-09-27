@@ -4,7 +4,7 @@ Otomatik testler (`flutter test`) saf mantığı ve arayüz akışını doğrula
 
 Her satırı işaretleyin: ✅ geçti · ❌ kaldı (not düşün). Henüz cihazda denenmemiş satırlar **DEVICE TEST PENDING** sayılır; raporda "geçti" olarak yazılmaz.
 
-Bölümler: **A–B** zorunlu akışlar · **1–13** temel senaryolar · **E** ek kontroller · **H** el yazısı · **N** karakter düzeltme · **T** tablo · **O** PDF çıktısı · **P** Free/Pro (debug) · **R** release güvenliği.
+Bölümler: **A–B** zorunlu akışlar · **1–13** temel senaryolar · **E** ek kontroller · **H** el yazısı · **N** karakter düzeltme · **T** tablo · **O** PDF çıktısı · **P** Free/Pro (debug) · **R** release güvenliği · **Z** bu turun düzeltmeleri.
 
 **Cihaz:** ____________ **Android sürümü:** ____ **APK:** release / debug **Tarih:** ________
 
@@ -58,6 +58,10 @@ Test için şu dosyaları hazırlayın:
    ```
 10. **Geniş tablo:** 6 veya daha fazla kolonlu bir tablo (yatay PDF testi için).
 11. **Uzun metin:** 5+ sayfa dolduracak kadar uzun düz metin (PDF sayfalama testi için; Hazırlık 5'in metnini kullanabilirsiniz).
+12. **Fiş:** Gerçek bir market fişi (tutarlar sağa dayalı, 6+ satır). Sağa dayalı kolon eski sürümde yanlış algılanıyordu.
+13. **Başlıklı tablo:** Tablonun üstünde tam genişlikte bir başlık satırı olan fiyat listesi (ör. "MERMER FİYAT LİSTESİ 2026").
+14. **Kapı/duvar yazısı:** Bir kapıya, duvara veya panoya **elle** yazılmış yazı. Üç kopya çekin: (a) karşıdan, (b) yandan açıyla (perspektif), (c) gölgeli/düşük ışıkta.
+15. **Eğik tablo:** Hazırlık 9'u telefonu kasıtlı olarak 2–5° eğik tutarak çekin.
 
 ## Zorunlu akışlar (V1 bunlar olmadan tamamlanmış sayılmaz)
 
@@ -178,25 +182,74 @@ Tamamen çevrimdışıdır. Yazı tipi uygulamanın içinde gömülüdür.
 
 | # | Test | Adımlar | Beklenen | Sonuç |
 |---|---|---|---|---|
-| O1 | Metin → PDF | Herhangi bir OCR sonucu → **PDF olarak kaydet** → Cihaza kaydet | PDF oluşur; açıldığında başlık + metin görünür | |
+| O1 | Metin → PDF | Herhangi bir OCR sonucu → **Metni PDF Yap** → Cihaza kaydet | PDF oluşur; açıldığında başlık + metin görünür | |
 | O2 | Türkçe karakter | O1'in PDF'ini aç | `ş ğ İ ı Ç Ü Ö` **doğru** görünür (kutu/soru işareti yok) | |
 | O3 | Uzun metin sayfalama | Hazırlık 11 → PDF | Metin birden fazla sayfaya bölünür; **taşma ve boş sayfa yok**; sağ altta sayfa numarası | |
 | O4 | Paylaş | O1 → **Paylaş** | WhatsApp/E-posta'ya PDF olarak gider, karşı taraf açabilir | |
-| O5 | Boş metin | Metni tamamen sil → PDF olarak kaydet | Anlaşılır hata; boş PDF oluşmaz | |
-| O6 | Tablo → PDF | Hazırlık 9 → PDF olarak kaydet → **Tablo olarak** | Gerçek tablo: satır/kolon **kenarlıkları** görünür, başlık satırı gri | |
-| O7 | Aynı belgeyi metin olarak | Hazırlık 9 → PDF olarak kaydet → **Metin olarak** | Tablo yerine düz metin basılır (seçim çalışıyor) | |
+| O5 | Boş metin | Metni tamamen sil → Metni PDF Yap | Anlaşılır hata; boş PDF oluşmaz | |
+| O6 | Tablo → PDF | Hazırlık 9 → Metni PDF Yap → **Tablo olarak** | Gerçek tablo: satır/kolon **kenarlıkları** görünür, başlık satırı gri | |
+| O7 | Aynı belgeyi metin olarak | Hazırlık 9 → Metni PDF Yap → **Metin olarak** | Tablo yerine düz metin basılır (seçim çalışıyor) | |
 | O8 | Geniş tablo → PDF | Hazırlık 10 → Tablo olarak | Sayfa **yatay** (landscape) basılır, kolonlar sığar | |
 | O9 | Uzun tablo → PDF | 40+ satırlık tablo | Birden fazla sayfa; **başlık satırı her sayfada tekrarlanır** | |
-| O10 | Fotoğraf → PDF | Ana ekran → **Fotoğraflardan PDF** → 1 dikey fotoğraf | Tek sayfalık PDF, sayfa dikey, fotoğraf **oranı bozulmaz** | |
+| O10 | Fotoğraf → PDF | Ana ekran → **Fotoğrafı PDF Yap** → 1 dikey fotoğraf | Tek sayfalık PDF, sayfa dikey, fotoğraf **oranı bozulmaz** | |
 | O11 | Yatay fotoğraf | O10'u yatay fotoğrafla | Sayfa **yatay**, kırpılma yok | |
-| O12 | Çoklu fotoğraf → tek PDF | Fotoğraflardan PDF → 3 fotoğraf (dikey+yatay karışık) | **Tek** PDF, 3 sayfa, **seçim sırası korunur**, her sayfa kendi yönünde | |
+| O12 | Çoklu fotoğraf → tek PDF | Fotoğrafı PDF Yap → 3 fotoğraf (dikey+yatay karışık) | **Tek** PDF, 3 sayfa, **seçim sırası korunur**, her sayfa kendi yönünde | |
 | O13 | EXIF yönü | Telefonu yan tutarak çekilmiş fotoğrafı PDF yap | Fotoğraf **doğru yönde** (yan yatmaz) | |
 | O14 | Büyük fotoğraf / bellek | 12 MP+ 3 fotoğraf → PDF | Çökme yok, dosya makul boyutta (küçültme çalışıyor) | |
 | O15 | PDF adı | O1'de başlık "Fatura 12" | Dosya adı `Fatura 12 - GG.AA.YYYY.pdf` | |
 | O16 | Geçici dosya temizliği | Birkaç PDF paylaş → geçici klasörü kontrol et | Artık dosyalar birikmez | |
 | O17 | Uçak modu | O1, O6, O12'yi internetsiz yap | Hepsi çalışır (tam çevrimdışı) | |
 | O18 | İşlem sırasında geri tuşu | PDF oluşturulurken geri | Uygulama donmaz/çökmez | |
-| O19 | Fotoğraf seçmeden vazgeç | Fotoğraflardan PDF → seçiciyi kapat | Sessizce ana ekrana dönülür, hata yok, hak harcanmaz | |
+| O19 | Fotoğraf seçmeden vazgeç | Fotoğrafı PDF Yap → seçiciyi kapat | Sessizce ana ekrana dönülür, hata yok, hak harcanmaz | |
+
+## Z. Bu turun düzeltmeleri (gerçek cihaz doğrulaması)
+
+Bu bölüm, gerçek cihaz testinde bulunan üç sorunun gerçekten düzeldiğini ölçer.
+**Her satır cihazda denenmeden PASS yazılmaz.**
+
+### Z1–Z6 · Tablo algılama
+
+| # | Test | Beklenen | Sonuç |
+|---|---|---|---|
+| Z1 | Çizgili 3 kolonlu tablo (Hazırlık 9) | "Tablo: N satır × 3 kolon" çipi çıkar; hücreler doğru ayrışır | |
+| Z2 | Çizgisiz 3 kolonlu tablo | Aynı şekilde 3 kolon algılanır (çizgi şart değil) | |
+| Z3 | Eğik çekilmiş tablo (Hazırlık 15) | Satır sayısı **gerçek satır sayısıyla aynı** olmalı; satırlar bölünmemeli | |
+| Z4 | Market fişi (Hazırlık 12) | Kolon sayısı **2** olmalı (tutarlar sağa dayalı olsa da bölünmemeli) | |
+| Z5 | Başlıklı tablo (Hazırlık 13) | Başlık tek hücrede kalır, kolonlara parçalanmaz | |
+| Z6 | 4+ kolonlu tablo (Hazırlık 10) | Kolonlar algılanır veya düz metne düşer; **veri kaybolmaz** | |
+| Z6b | Tablo algılanamayan karmaşık tablo | "Tablo algılanamadı, metin olarak gösteriliyor" bilgisi çıkar ve metin tam görünür | |
+| Z6c | Düz paragraf | Ne tablo çipi ne "algılanamadı" bilgisi çıkar (gereksiz uyarı yok) | |
+
+### Z7–Z10 · Fotoğraf PDF / Metin PDF ayrımı
+
+| # | Test | Beklenen | Sonuç |
+|---|---|---|---|
+| Z7 | Ana ekran → **Fotoğrafı PDF Yap** → 1 fotoğraf | PDF'te **fotoğrafın kendisi** var; metin seçilemez | |
+| Z8 | Fotoğraf Çek → OCR → düzenle → **Metni PDF Yap** → "Metin olarak" | PDF'te **seçilebilir metin** var; fotoğraf **yok**. PDF görüntüleyicide metni işaretleyip kopyalayın | |
+| Z9 | Tablo algılanan belge → **Metni PDF Yap** → "Tablo olarak" | Gerçek tablo (kenarlıklar) + metin seçilebilir; fotoğraf yok | |
+| Z10 | Kapıda "AHMET / 12.05.2026 / 3500 TL" yazısı → OCR → Metni PDF Yap | Üç satır PDF'te kopyalanabilir metin olarak çıkar | |
+
+### Z11–Z16 · El yazısı ve perspektif (PARTIAL — doğruluk garantisi yok)
+
+Amaç "doğru okudu mu" değil; **çökmüyor mu, basılı metni bozmuyor mu, eskiye göre daha iyi mi**.
+
+| # | Test | Beklenen | Sonuç |
+|---|---|---|---|
+| Z11 | El yazısı modu KAPALI iken Hazırlık 14(a) | Sonucu **not edin** (karşılaştırma tabanı) | |
+| Z12 | El yazısı modu AÇIK iken Hazırlık 14(a) | İşlem tamamlanır; sonucu Z11 ile karşılaştırıp **hangisinin daha iyi olduğunu yazın** | |
+| Z13 | El yazısı modu AÇIK iken Hazırlık 14(b) (perspektif) | Çökme yok; sonuç Z12'den kötü olmamalı | |
+| Z14 | El yazısı modu AÇIK iken Hazırlık 14(c) (gölge/düşük ışık) | Çökme yok; aydınlatma normalizasyonu sayesinde gölgeli taraf da okunmaya çalışılır | |
+| Z15 | El yazısı modu AÇIK iken **basılı** belge (Hazırlık 1) | Basılı metin sonucu bozulmamalı | |
+| Z16 | El yazısı modu AÇIK, 12 MP fotoğraf | Arayüz donmaz; işlem birkaç saniye sürebilir; iki geçiş yapılsa bile **tek OCR hakkı** düşer | |
+
+### Z17–Z19 · Karakter düzeltme (bozulmadı mı)
+
+| # | Test | Beklenen | Sonuç |
+|---|---|---|---|
+| Z17 | `ME2AR` okunan belge | Metinde `MEZAR` | |
+| Z18 | `5ELAM` okunan belge | Metinde `SELAM` | |
+| Z19 | `2025`, `02.05.2026`, `5551234567`, `2500 TL`, `%20` | **Hiçbiri değişmez** | |
+| Z19b | Tablo hücrelerinde aynı düzeltme | Hücrede `ME2AR` kalmaz; metinle tutarlı | |
 
 ## P. Free / Pro (debug APK ile)
 
@@ -234,7 +287,7 @@ Bu araçlar yalnızca debug derlemededir; release APK'da bulunmazlar (bkz. R bö
 | P17 | Sayaçları sıfırla → 1 PDF oluştur | Kalan PDF oluşturma 2 → 1; **OCR ve PDF okuma hakları değişmez** | |
 | P18 | 10 OCR + 3 PDF okuma yap | PDF **oluşturma** hakkı hâlâ 2 (ayrı kota) | |
 | P19 | PDF oluşturmayı iptal et veya hata aldır (ör. boş metin) | Hak **harcanmaz** (Pro ekranında sayı değişmez) | |
-| P20 | Fotoğraflardan PDF'te seçiciyi kapat | Hak harcanmaz | |
+| P20 | "Fotoğrafı PDF Yap"da seçiciyi kapat | Hak harcanmaz | |
 | P21 | El yazısı modu AÇIK iken 1 OCR | Yalnızca OCR hakkı düşer; **ek kota yok** | |
 | P22 | Tablo algılanan belgede tablo önizleme aç/kapat | Hiçbir hak harcanmaz | |
 | P23 | Mock Pro AÇ → 5 PDF oluştur | Sınır uygulanmaz; Free'ye dönünce **Free sayacı 0** (Pro kullanımı Free'ye yazılmaz) | |

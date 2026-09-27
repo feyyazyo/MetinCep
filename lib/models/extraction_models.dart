@@ -90,6 +90,7 @@ class ExtractionResult {
     this.rawText,
     this.tables = const [],
     this.normalizationCount = 0,
+    this.tableNearMiss = false,
   });
 
   /// Kullanıcıya gösterilen metin (karakter normalizasyonundan geçmiş hali).
@@ -115,6 +116,10 @@ class ExtractionResult {
 
   /// Karakter normalizasyonunda düzeltilen jeton sayısı (ör. ME2AR → MEZAR).
   final int normalizationCount;
+
+  /// Yerleşim tabloya benziyordu ama güven eşiğini geçemedi. Metin korunur;
+  /// kullanıcıya yalnızca bilgi verilir ("tablo algılanamadı").
+  final bool tableNearMiss;
 
   bool get isPartial => sourcePageCount != null && sourcePageCount! > unitCount;
 

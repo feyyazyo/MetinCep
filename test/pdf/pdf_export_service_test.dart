@@ -220,4 +220,66 @@ void main() {
       expect(name.contains('/'), isFalse);
     });
   });
+
+  group('Metin PDF / Fotoğraf PDF ayrımı', () {
+    String writeGrayImage(String name, {int width = 600, int height = 800}) {
+      final image = img.Image(width: width, height: height);
+      img.fill(image, color: img.ColorRgb8(210, 210, 210));
+      final path = '${directory.path}${Platform.pathSeparator}$name';
+      File(path).writeAsBytesSync(img.encodeJpg(image, quality: 85));
+      return path;
+    }
+
+    test('metin PDF\'i gömülü FOTOĞRAF içermez (seçilebilir metin)', () async {
+      final bytes = await service.buildTextPdf(
+        title: 'Kapı Yazısı',
+        text: 'AHMET\n12.05.2026\n3500 TL',
+      );
+      final content = asLatin(bytes);
+
+      // Gömülü yazı tipi var: metin gerçek metin olarak yazılmış.
+      expect(content, contains('/FontFile2'));
+      // Görüntü nesnesi YOK: fotoğrafın kendisi PDF'e konmamış.
+      // pdf paketi sayfa kaynaklarına /XObject sözlüğünü YALNIZCA görüntü
+      // varsa yazar; metin PDF'inde hiç bulunmaz.
+      expect(content.contains('/XObject'), isFalse);
+      expect(content.contains('/Subtype/Image'), isFalse);
+    });
+
+    test('tablo PDF\'i de gömülü fotoğraf içermez', () async {
+      final bytes = await service.buildTablePdf(
+        title: 'Fiyat Listesi',
+        table: buildTable(3, 4),
+      );
+      final content = asLatin(bytes);
+
+      expect(content, contains('/FontFile2'));
+      expect(content.contains('/XObject'), isFalse);
+    });
+
+    test('fotoğraf PDF\'i gömülü fotoğraf İÇERİR', () async {
+      final bytes = await service.buildImagesPdf(
+        imagePaths: [writeGrayImage('sayfa.jpg')],
+      );
+      final content = asLatin(bytes);
+
+      // Bu akış bilinçli olarak fotoğrafın kendisini sayfaya koyar.
+      // /XObject sözlüğü sayfa kaynaklarında düz metin olarak yazılır.
+      expect(content.contains('/XObject'), isTrue);
+      expect(countPages(bytes), 1);
+    });
+
+    test('aynı içerik iki modda farklı PDF üretir', () async {
+      final imagePath = writeGrayImage('ayni.jpg');
+      final imagePdf = await service.buildImagesPdf(imagePaths: [imagePath]);
+      final textPdf = await service.buildTextPdf(
+        title: 'Aynı belge',
+        text: 'Fotoğraftan çıkarılan metin',
+      );
+
+      expect(asLatin(imagePdf).contains('/XObject'), isTrue);
+      expect(asLatin(textPdf).contains('/XObject'), isFalse);
+      expect(asLatin(textPdf), contains('/FontFile2'));
+    });
+  });
 }

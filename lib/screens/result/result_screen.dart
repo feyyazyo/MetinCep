@@ -421,8 +421,10 @@ class _ResultScreenState extends State<ResultScreen> {
     final showRawRestore = extraction != null &&
         extraction.normalizationCount > 0 &&
         extraction.hasRawDifference;
+    // Tabloya benziyordu ama güven eşiğini geçemedi: veri kaybolmadı, metin duruyor.
+    final showTableMiss = table == null && extraction?.tableNearMiss == true;
 
-    if (table == null && !showRawRestore) {
+    if (table == null && !showRawRestore && !showTableMiss) {
       return const SizedBox.shrink();
     }
 
@@ -437,6 +439,11 @@ class _ResultScreenState extends State<ResultScreen> {
               avatar: const Icon(Icons.table_chart_outlined, size: 18),
               label: Text('Tablo: ${table.rowCount} satır × ${table.columnCount} kolon'),
               onPressed: _busy ? null : _openTablePreview,
+            ),
+          if (showTableMiss)
+            Chip(
+              avatar: const Icon(Icons.info_outline, size: 18),
+              label: const Text('Tablo algılanamadı, metin olarak gösteriliyor'),
             ),
           if (showRawRestore)
             ActionChip(
@@ -530,8 +537,10 @@ class _ResultScreenState extends State<ResultScreen> {
         builder: (dialogContext) => AlertDialog(
           title: const Text('PDF nasıl oluşturulsun?'),
           content: const Text(
-            'Algılanan tablo gerçek PDF tablosu olarak aktarılabilir '
-            'ya da düzenlediğin metin olduğu gibi yazdırılabilir.',
+            'Her iki seçenekte de PDF içine gerçek, seçilebilir metin yazılır; '
+            'fotoğrafın kendisi PDF\'e konmaz.\n\n'
+            'Tablo olarak: algılanan tablo satır ve kolonlarıyla basılır.\n'
+            'Metin olarak: düzenlediğin metin olduğu gibi basılır.',
           ),
           actions: [
             TextButton(
@@ -623,7 +632,7 @@ class _ResultScreenState extends State<ResultScreen> {
               ),
               onPressed: _busy ? null : _exportPdf,
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
-              label: const Text('PDF olarak kaydet'),
+              label: const Text('Metni PDF Yap'),
             ),
           ),
           const SizedBox(height: 8),

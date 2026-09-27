@@ -2,6 +2,7 @@ import '../core/utils/character_normalizer.dart';
 import '../core/utils/table_detector.dart';
 import '../core/utils/text_layout_formatter.dart';
 import '../models/ocr_table.dart';
+import '../models/table_grid_lines.dart';
 import 'ocr_service.dart';
 
 /// Tek bir OCR sayfasının işlenmiş hali.
@@ -12,6 +13,7 @@ class OcrPipelineResult {
     this.table,
     this.normalizationCount = 0,
     this.changes = const [],
+    this.tableNearMiss = false,
   });
 
   static const OcrPipelineResult empty = OcrPipelineResult(rawText: '', text: '');
@@ -29,6 +31,11 @@ class OcrPipelineResult {
 
   final List<NormalizationChange> changes;
 
+  /// Yerleşim tabloya benziyordu ama güven eşiğini geçemedi. Kullanıcıya
+  /// "tablo algılanamadı, metin olarak gösteriliyor" demek için kullanılır;
+  /// metin her durumda korunur, veri kaybolmaz.
+  final bool tableNearMiss;
+
   bool get isEmpty => text.trim().isEmpty && rawText.trim().isEmpty;
 }
 
@@ -39,7 +46,7 @@ class OcrPipelineResult {
 class OcrPipeline {
   const OcrPipeline();
 
-  OcrPipelineResult process(OcrPage page) {
+  OcrPipelineResult process(OcrPage page, {TableGridLines? gridLines}) {
     if (page.blocks.isEmpty) {
       final raw = page.rawText;
       if (raw.trim().isEmpty) {
@@ -89,16 +96,19 @@ class OcrPipeline {
 
     final normalizedText = TextLayoutFormatter.formatBlocks(normalizedBlocks);
     // Tablo, düzeltilmiş metin üzerinden algılanır; koordinatlar değişmez.
-    final table = TableDetector.detect(
+    // Fotoğrafta tablo çizgisi bulunduysa kolon sınırları onunla doğrulanır.
+    final detection = TableDetector.analyze(
       normalizedBlocks.expand((block) => block.lines).toList(),
+      gridLines: gridLines,
     );
 
     return OcrPipelineResult(
       rawText: page.rawText,
       text: normalizedText.isEmpty ? page.rawText : normalizedText,
-      table: table,
+      table: detection.table,
       normalizationCount: changes.length,
       changes: changes,
+      tableNearMiss: detection.isNearMiss,
     );
   }
 }

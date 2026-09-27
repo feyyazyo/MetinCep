@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:metincep/core/utils/text_layout_formatter.dart';
+import 'package:metincep/models/table_grid_lines.dart';
 import 'package:metincep/services/ocr_pipeline.dart';
 import 'package:metincep/services/ocr_service.dart';
 
@@ -111,5 +112,70 @@ void main() {
     expect(result.isEmpty, isTrue);
     expect(result.text, '');
     expect(result.table, isNull);
+  });
+
+  group('Tablo çizgisi ipuçları ve geri bildirim', () {
+    OcrPage tabularPage() => page([
+          line([('Ürün', 40, 130), ('Adet', 240, 320), ('Fiyat', 420, 500)], top: 0),
+          line([('Mermer', 40, 150), ('10', 240, 265), ('2500', 420, 480)], top: 40),
+          line([('Granit', 40, 145), ('5', 240, 252), ('3200', 420, 480)], top: 80),
+        ]);
+
+    test('çizgi ipucu verilmese de tablo bulunur', () {
+      const pipeline = OcrPipeline();
+      final result = pipeline.process(tabularPage());
+
+      expect(result.table, isNotNull);
+      expect(result.table!.columnCount, 3);
+      expect(result.tableNearMiss, isFalse);
+    });
+
+    test('çizgi ipucu tablo güvenini yükseltir', () {
+      const pipeline = OcrPipeline();
+      final withoutLines = pipeline.process(tabularPage());
+      final withLines = pipeline.process(
+        tabularPage(),
+        gridLines: const TableGridLines(
+          horizontal: [-10, 30, 70, 110],
+          vertical: [30, 200, 380, 520],
+        ),
+      );
+
+      expect(withLines.table, isNotNull);
+      expect(
+        withLines.table!.confidence,
+        greaterThan(withoutLines.table!.confidence),
+      );
+    });
+
+    test('düz metinde tablo yok ve uyarı gösterilmez', () {
+      const pipeline = OcrPipeline();
+      final result = pipeline.process(
+        page([
+          line([('Bu', 0, 30), ('bir', 35, 65), ('paragraf', 70, 150)], top: 0),
+          line([('ikinci', 0, 50), ('satır', 55, 100)], top: 40),
+        ]),
+      );
+
+      expect(result.table, isNull);
+      expect(result.tableNearMiss, isFalse);
+      expect(result.text.isNotEmpty, isTrue, reason: 'metin her durumda korunur');
+    });
+
+    test('tablo bulunamazsa metin ASLA kaybolmaz', () {
+      const pipeline = OcrPipeline();
+      final result = pipeline.process(
+        page([
+          line([('A', 0, 30), ('123', 300, 350)], top: 0),
+          line([('B', 60, 95)], top: 40),
+          line([('C', 10, 45), ('456', 280, 330)], top: 80),
+          line([('D', 90, 130)], top: 120),
+        ]),
+      );
+
+      expect(result.text, contains('123'));
+      expect(result.text, contains('456'));
+      expect(result.rawText, contains('456'));
+    });
   });
 }

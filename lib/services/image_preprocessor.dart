@@ -6,9 +6,20 @@ import 'package:image/image.dart' as img;
 
 import '../core/constants/app_constants.dart';
 import '../core/utils/image_decoding.dart';
+import '../core/utils/image_enhancement.dart';
 import '../models/ocr_mode.dart';
 
-/// El yazısı için görüntü ön işleme. Saf (platformsuz) olduğu için test edilebilir.
+/// El yazısı ve zor ışık koşulları için görüntü ön işleme.
+///
+/// **Basılı metin yolu hiç değişmez:** [prepare] `printed` modunda ilk satırda
+/// `null` döner, çağıran orijinal dosyayı kullanır. İki boru hattı ayrıdır.
+///
+/// El yazısı boru hattı (kapı/duvar/kâğıt senaryosu):
+/// ```
+/// EXIF yönü → ölçekleme → (varsa) PERSPEKTİF DÜZELTME → gri tonlama
+/// → AYDINLATMA NORMALİZASYONU → KONTRAST GERME → EĞİKLİK DÜZELTME
+/// ```
+/// İkinci geçiş (ilk OCR zayıf kalırsa): `GÜRÜLTÜ AZALTMA → UYARLAMALI EŞİKLEME`.
 class ImagePreprocessor {
   const ImagePreprocessor();
 
@@ -36,33 +47,53 @@ class ImagePreprocessor {
     }
     try {
       // Ağır piksel işi arka plan isolate'inde: arayüz donmaz.
-      final result = await compute(_runHandwritingProfile, <String, String>{
+      return await compute(runHandwritingProfile, <String, String>{
         'source': sourcePath,
         'target': targetPath,
       });
-      return result;
     } catch (error) {
       debugPrint('El yazısı ön işlemesi başarısız, orijinal kullanılacak: $error');
       return null;
     }
   }
 
-  /// El yazısı profili: gri tonlama + kontrast + eğiklik düzeltmesi.
+  /// İkinci geçiş: ilk OCR zayıf kaldıysa ikili (siyah-beyaz) sürüm denenir.
+  /// Başarısızsa `null` döner ve ilk sonuç korunur.
+  ///
+  /// [alreadyEnhanced] true ise kaynak el yazısı profilinden geçmiştir ve
+  /// yalnızca gürültü azaltma + eşikleme uygulanır.
+  Future<String?> prepareBinary({
+    required String sourcePath,
+    required String targetPath,
+    bool alreadyEnhanced = false,
+  }) async {
+    try {
+      return await compute(runBinaryProfile, <String, String>{
+        'source': sourcePath,
+        'target': targetPath,
+        'enhanced': alreadyEnhanced ? '1' : '0',
+      });
+    } catch (error) {
+      debugPrint('İkili el yazısı geçişi başarısız: $error');
+      return null;
+    }
+  }
+
+  /// El yazısı profili: perspektif → gri → aydınlatma → kontrast → eğiklik.
   static img.Image enhanceForHandwriting(img.Image source) {
     var image = img.bakeOrientation(source);
+    image = _downscale(image);
 
-    final longest = math.max(image.width, image.height);
-    if (longest > AppConstants.imageMaxDimension) {
-      final scale = AppConstants.imageMaxDimension / longest;
-      image = img.copyResize(
-        image,
-        width: math.max(1, (image.width * scale).round()),
-        interpolation: img.Interpolation.average,
-      );
+    // Perspektif: yalnızca güvenilir bir belge dörtgeni bulunursa uygulanır.
+    // Yanlış kırpma, perspektifi hiç düzeltmemekten kötüdür.
+    final rectified = ImageEnhancement.rectifyDocument(image);
+    if (rectified != null) {
+      image = _downscale(rectified);
     }
 
     image = img.grayscale(image);
-    image = img.adjustColor(image, contrast: 1.4);
+    image = ImageEnhancement.normalizeIllumination(image);
+    image = ImageEnhancement.stretchContrast(image);
 
     final skew = estimateSkewDegrees(image);
     if (skew.abs() >= minSkewToRotate) {
@@ -77,6 +108,29 @@ class ImagePreprocessor {
       );
     }
     return image;
+  }
+
+  /// İkili profil: el yazısı profilinin üzerine gürültü azaltma + eşikleme.
+  /// (Kaynak ham fotoğrafsa kullanılır.)
+  static img.Image binarizeForHandwriting(img.Image source) =>
+      binarizeEnhanced(enhanceForHandwriting(source));
+
+  /// Zaten iyileştirilmiş görüntüyü ikili hâle getirir: gürültü azaltma +
+  /// uyarlamalı eşikleme. İyileştirme adımları ikinci kez çalıştırılmaz.
+  static img.Image binarizeEnhanced(img.Image enhanced) =>
+      ImageEnhancement.adaptiveThreshold(ImageEnhancement.denoise(enhanced));
+
+  static img.Image _downscale(img.Image image) {
+    final longest = math.max(image.width, image.height);
+    if (longest <= AppConstants.imageMaxDimension) {
+      return image;
+    }
+    final scale = AppConstants.imageMaxDimension / longest;
+    return img.copyResize(
+      image,
+      width: math.max(1, (image.width * scale).round()),
+      interpolation: img.Interpolation.average,
+    );
   }
 
   /// Metin satırlarının eğikliğini derece cinsinden tahmin eder.
@@ -119,7 +173,8 @@ class ImagePreprocessor {
       return 0; // Yeterli metin yok.
     }
 
-    final bucketCount = height + (width * math.tan(_radians(maxSkewDegrees))).ceil() * 2 + 2;
+    final bucketCount =
+        height + (width * math.tan(_radians(maxSkewDegrees))).ceil() * 2 + 2;
     final offset = bucketCount ~/ 2 - height ~/ 2;
 
     var bestAngle = 0.0;
@@ -151,7 +206,24 @@ class ImagePreprocessor {
 }
 
 /// Isolate içinde çalışan üst düzey fonksiyon (compute için zorunlu).
-String? _runHandwritingProfile(Map<String, String> payload) {
+String? runHandwritingProfile(Map<String, String> payload) => _run(
+      payload,
+      ImagePreprocessor.enhanceForHandwriting,
+    );
+
+/// Isolate içinde çalışan ikili (siyah-beyaz) profil.
+/// `enhanced` alanı '1' ise kaynak zaten iyileştirilmiştir.
+String? runBinaryProfile(Map<String, String> payload) => _run(
+      payload,
+      payload['enhanced'] == '1'
+          ? ImagePreprocessor.binarizeEnhanced
+          : ImagePreprocessor.binarizeForHandwriting,
+    );
+
+String? _run(
+  Map<String, String> payload,
+  img.Image Function(img.Image source) transform,
+) {
   final sourcePath = payload['source']!;
   final targetPath = payload['target']!;
 
@@ -160,7 +232,7 @@ String? _runHandwritingProfile(Map<String, String> payload) {
     return null;
   }
 
-  final processed = ImagePreprocessor.enhanceForHandwriting(decoded);
+  final processed = transform(decoded);
   final encoded = img.encodeJpg(processed, quality: AppConstants.imageQuality);
   File(targetPath).writeAsBytesSync(encoded, flush: true);
   return targetPath;

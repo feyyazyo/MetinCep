@@ -75,6 +75,7 @@ class PdfService {
       final tables = <OcrTable>[];
       var ocrPageCount = 0;
       var normalizationCount = 0;
+      var tableNearMiss = false;
 
       for (var index = 0; index < total; index++) {
         cancellationToken.throwIfCancelled();
@@ -106,6 +107,7 @@ class PdfService {
             pageText = recognized.text;
             pageRawText = recognized.rawText;
             normalizationCount += recognized.normalizationCount;
+            tableNearMiss = tableNearMiss || recognized.tableNearMiss;
             final table = recognized.table;
             if (table != null) {
               tables.add(table);
@@ -135,6 +137,7 @@ class PdfService {
         sourcePageCount: pageCount,
         tables: tables,
         normalizationCount: normalizationCount,
+        tableNearMiss: tableNearMiss && tables.isEmpty,
       );
     } finally {
       try {

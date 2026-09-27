@@ -27,6 +27,9 @@ class OcrWord {
 
   double get centerY => (top + bottom) / 2;
 
+  /// Yatay merkez. Eğik çekilmiş fotoğrafta satır eğimi bu değere göre hesaplanır.
+  double get centerX => (left + right) / 2;
+
   OcrWord copyWith({String? text}) => OcrWord(
         text: text ?? this.text,
         left: left,

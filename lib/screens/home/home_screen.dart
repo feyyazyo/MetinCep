@@ -59,7 +59,7 @@ class HomeScreen extends StatelessWidget {
                 ActionCard(
                   icon: Icons.photo_library_outlined,
                   title: 'Galeriden Seç',
-                  subtitle: 'Bir veya birkaç fotoğraf seçin',
+                  subtitle: 'Fotoğraftaki yazıyı metne çevirin',
                   onTap: () => ExtractionFlow.startGallery(context),
                 ),
                 ActionCard(
@@ -69,9 +69,9 @@ class HomeScreen extends StatelessWidget {
                   onTap: () => ExtractionFlow.startPdf(context),
                 ),
                 ActionCard(
-                  icon: Icons.picture_as_pdf_outlined,
-                  title: 'Fotoğraflardan PDF',
-                  subtitle: 'Fotoğrafları tek PDF dosyasına dönüştürün',
+                  icon: Icons.image_outlined,
+                  title: 'Fotoğrafı PDF Yap',
+                  subtitle: 'Fotoğrafın kendisi PDF sayfası olur (metin çıkarılmaz)',
                   onTap: () => PdfExportFlow.exportImagesFromGallery(context),
                 ),
                 const SizedBox(height: 20),
