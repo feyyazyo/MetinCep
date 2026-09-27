@@ -182,6 +182,49 @@ void main() {
       near(quad.bottomLeft.y, 520, 'sol alt y');
     });
 
+    test('arka plan seviyesi belge sınıfına girmez (Otsu sınır kuralı)', () {
+      // GERİLEME TESTİ: Otsu eşiği koyu sınıfın SON seviyesini döndürür.
+      // Karşılaştırma `>=` olursa arka plan (60) da "aydınlık" sayılır, en
+      // büyük bileşen tüm kare olur ve dörtgen (0,0)'dan başlar.
+      final image = img.Image(width: 400, height: 500);
+      img.fill(image, color: img.ColorRgb8(60, 60, 60));
+      img.fillPolygon(
+        image,
+        vertices: [
+          img.Point(80, 50),
+          img.Point(340, 90),
+          img.Point(320, 450),
+          img.Point(60, 410),
+        ],
+        color: img.ColorRgb8(235, 235, 235),
+      );
+
+      final quad = ImageEnhancement.detectDocumentQuad(image);
+
+      expect(quad, isNotNull);
+      expect(quad!.topLeft.x, greaterThan(20),
+          reason: 'tüm kare seçilirse 0 olurdu');
+      expect(quad.topLeft.y, greaterThan(20));
+      expect(quad.bottomRight.x, lessThan(380));
+    });
+
+    test('dörtgen arama girdiyi değiştirmez', () {
+      // detectDocumentQuad içinde img.grayscale yerinde çalışır; kopya
+      // alınmazsa çağıranın renkli görüntüsü griye dönerdi.
+      final image = img.Image(width: 200, height: 260);
+      img.fill(image, color: img.ColorRgb8(200, 40, 40));
+      final before = image.getPixel(10, 10);
+      final red = before.r;
+      final green = before.g;
+
+      ImageEnhancement.detectDocumentQuad(image);
+
+      final after = image.getPixel(10, 10);
+      expect(after.r, red);
+      expect(after.g, green);
+      expect(after.r == after.g, isFalse, reason: 'görüntü griye dönmemeli');
+    });
+
     test('düzeltme, dörtgenin oranına uygun bir görüntü üretir', () {
       final rectified = ImageEnhancement.rectifyDocument(perspectivePage());
 

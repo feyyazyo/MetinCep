@@ -204,6 +204,8 @@ class ImageEnhancement {
   /// Bulunamazsa veya doğrulamayı geçemezse `null` döner ve çağıran orijinali
   /// kullanır: **yanlış kırpma, perspektifi hiç düzeltmemekten kötüdür.**
   static DocumentQuad? detectDocumentQuad(img.Image source) {
+    // Kopya üzerinde çalışılır: img.grayscale yerinde değiştirir ve çağıranın
+    // görüntüsünü bozmamalıyız.
     var analysis = source;
     var scale = 1.0;
     if (analysis.width > quadAnalysisWidth) {
@@ -213,6 +215,8 @@ class ImageEnhancement {
         width: quadAnalysisWidth,
         interpolation: img.Interpolation.average,
       );
+    } else {
+      analysis = analysis.clone();
     }
     analysis = img.grayscale(analysis);
 
@@ -232,10 +236,14 @@ class ImageEnhancement {
     final threshold = _otsuThreshold(values);
 
     // Belge, arka plandan daha aydınlık olan büyük bir bölgedir.
+    //
+    // DİKKAT: [_otsuThreshold] koyu sınıfın SON seviyesini döndürür. Bu yüzden
+    // karşılaştırma **kesin büyüktür** olmalıdır; `>=` kullanılırsa arka plan
+    // seviyesi aydınlık sınıfa girer ve tüm kare "belge" sanılır.
     final bright = List<bool>.filled(width * height, false);
     var brightCount = 0;
     for (var index = 0; index < values.length; index++) {
-      if (values[index] >= threshold) {
+      if (values[index] > threshold) {
         bright[index] = true;
         brightCount++;
       }
@@ -285,7 +293,8 @@ class ImageEnhancement {
     );
   }
 
-  /// Otsu eşiği (0..1): iki sınıf arası varyansı en büyük yapan değer.
+  /// Otsu eşiği (0..1): iki sınıf arası varyansı en büyük yapan **koyu sınıfın
+  /// son seviyesi**. Aydınlık sınıf bu değerden *kesin büyük* olanlardır.
   static double _otsuThreshold(List<double> values) {
     final histogram = List<int>.filled(256, 0);
     for (final value in values) {
