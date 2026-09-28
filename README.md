@@ -318,15 +318,30 @@ Taranmış sayfalarda OCR sonrası karakter normalizasyonu ve tablo algılama uy
 
 Tamamen çevrimdışıdır. Yazı tipi uygulamanın içinde gömülüdür; hiçbir ağ isteği yapılmaz.
 
-**Üç ayrı çıktı mantığı vardır ve birbirine karıştırılmaz:**
+**Dört ayrı çıktı mantığı vardır ve birbirine karıştırılmaz:**
 
 | Mod | Nereden | PDF'in içine ne yazılır |
 |---|---|---|
-| **1. FOTOĞRAF PDF** | Ana ekran → **"Fotoğrafı PDF Yap"** | **Fotoğrafın kendisi.** Metin çıkarılmaz, OCR çalışmaz. Fotoğrafı olduğu gibi belgeye çevirmek içindir |
-| **2. METİN PDF** | Sonuç ekranı → **"Metni PDF Yap"** → "Metin olarak" | **Gerçek, seçilebilir metin.** Fotoğraf PDF'e konmaz. Kapıda "AHMET / 12.05.2026 / 3500 TL" yazıyorsa PDF'te bu satırlar kopyalanabilir metin olur |
-| **3. TABLO PDF** | Sonuç ekranı veya tablo ekranı → "Tablo olarak" | **Gerçek PDF tablosu:** satır, kolon, hücre, kenarlık. Yine metin; fotoğraf konmaz |
+| **1. FOTOĞRAF PDF** | Ana ekran → **"Fotoğrafı PDF Yap"** | **Yalnızca fotoğrafın kendisi.** OCR çalışmaz. Fotoğrafı olduğu gibi belgeye çevirmek içindir |
+| **2. ARANABİLİR PDF** | Sonuç ekranı → **"PDF Yap"** → "Fotoğraflı (aranabilir)" | **Fotoğraf + üzerinde görünmez metin katmanı.** Belge olduğu gibi görünür, ama yazı seçilebilir, kopyalanabilir ve aranabilir. Tarayıcıların ürettiği "searchable PDF" ile aynı fikir |
+| **3. METİN PDF** | Sonuç ekranı → **"PDF Yap"** → "Metin olarak" | **Yalnızca gerçek, seçilebilir metin.** Fotoğraf konmaz. Kapıda "AHMET / 12.05.2026 / 3500 TL" yazıyorsa PDF'te bu satırlar kopyalanabilir metin olur |
+| **4. TABLO PDF** | Sonuç ekranı veya tablo ekranı → "Tablo olarak" | **Gerçek PDF tablosu:** satır, kolon, hücre, kenarlık. Yine metin; fotoğraf konmaz |
 
-Hangi modda olduğunuz arayüzde açıkça yazılıdır: ana ekrandaki kart "Fotoğrafı PDF Yap" (altyazı: *fotoğrafın kendisi PDF sayfası olur, metin çıkarılmaz*), sonuç ekranındaki düğme "Metni PDF Yap". Tablo algılandıysa ikisi arasında seçim penceresi çıkar ve pencerede her iki seçeneğin de gerçek metin yazdığı belirtilir. Bu ayrım otomatik testle de doğrulanır: metin ve tablo PDF'lerinde gömülü görüntü nesnesi (`/XObject`) **bulunmaz**, fotoğraf PDF'inde bulunur.
+Hangi modda olduğunuz arayüzde açıkça yazılıdır: ana ekrandaki kart "Fotoğrafı PDF Yap" (altyazı: *fotoğrafın kendisi PDF sayfası olur, metin çıkarılmaz*), sonuç ekranındaki düğme "PDF Yap" ve açılan listede her seçeneğin altında fotoğrafın PDF'e girip girmeyeceği yazar. Ayrım otomatik testle de doğrulanır: metin ve tablo PDF'lerinde gömülü görüntü nesnesi (`/XObject`) **bulunmaz**; fotoğraf PDF'inde bulunur; aranabilir PDF'te **ikisi birden** bulunur (`/XObject` + `/FontFile2`).
+
+### Aranabilir PDF nasıl çalışır
+
+```text
+Fotoğraf → OCR (kelime kutularıyla) → karakter düzeltmesi
+        → kelime kutuları 0..1 aralığına normalize edilir
+        → PDF sayfası: fotoğraf çizilir, üstüne Opacity(0) ile gerçek metin yazılır
+```
+
+Metin `Opacity(0)` (PDF grafik durumu, alfa 0) ile çizilir: PDF içinde **gerçek metin nesnesi** olarak durur, ekranda görünmez. Kopyalanan yazı ekranda görülen (düzeltilmiş) metinle aynıdır, çünkü katman ham OCR çıktısından değil **normalize edilmiş kelimelerden** kurulur.
+
+Koordinatlar normalize saklandığı için fotoğraf PDF'e küçültülerek yerleştirilse de metin doğru yere denk gelir. El yazısı modunda perspektif düzeltme çalıştıysa katman birkaç piksel kayabilir; metin görünmez olduğu için bu yalnızca seçim alanını etkiler, görüntüyü etkilemez.
+
+**Kenar boşluğu:** fotoğraf içeren sayfalarda (2 ve 1. mod) sayfa kenar boşluğu sıfırdır. `PdfPageFormat.a4` varsayılan olarak her kenarda 2 cm boşluk bırakıyordu; bu, fotoğrafı sayfa genişliğinin yalnızca %81'ine sıkıştırıyor ve baskıda gereksiz küçültüyordu.
 
 Ayrıntılar:
 
@@ -420,6 +435,7 @@ Ekranlar ──► FeatureAccessService ──┬──► EntitlementService �
 | `core/utils/image_enhancement.dart` | Aydınlatma normalizasyonu, kontrast germe, medyan gürültü azaltma, uyarlamalı eşikleme, belge dörtgeni + perspektif düzeltme |
 | `core/utils/integral_image.dart` | Toplam alan tablosu: yerel ortalamayı O(1) verir (eşikleme ve normalizasyonun temeli) |
 | `models/table_grid_lines.dart` | Bulunan tablo çizgileri (yalnızca ipucu) |
+| `models/searchable_page.dart` | Aranabilir PDF sayfası: fotoğraf yolu + normalize kelime kutuları |
 | `models/ocr_table.dart` | `OcrTable` / `OcrTableRow` / `OcrTableCell` |
 | `models/ocr_mode.dart` | Basılı metin / el yazısı modu |
 | `services/ocr_pipeline.dart` | OCR sonrası normalizasyon + tablo algılama + "tablo algılanamadı" geri bildirimi |
@@ -469,6 +485,32 @@ Kalan haklar yalnızca Pro ekranında ("Bugün kalan OCR: 7 / 10") ve Ayarlar �
 - **Saat geri alma koruması:** Görülen en geç zaman saklanır. Saat bundan 10 dakikadan fazla geri alınırsa sayaçlar sıfırlanmaz. "Saati yarına al → hakları sıfırla → geri al" döngüsü ek hak kazandırmaz.
 - Bozuk veya elle değiştirilmiş dosya uygulamayı çökertmez; geçersiz alanlar sıfır sayılır.
 - ⚠️ **Bu bir caydırıcıdır, kesin güvenlik değildir.** Uygulama verisini temizlemek veya root erişimi sayaçları sıfırlayabilir. Gerçek koruma için limitlerin sunucu tarafında doğrulanması gerekir (ör. Play Integrity API + hesap bazlı sayaç). MetinCep bu aşamada bilinçli olarak sunucusuz ve çevrimdışı çalışır.
+
+### Sınırsız test APK'sı (yalnızca geliştirici)
+
+Kendi cihazınızda gerçek fotoğraflarla deneme yaparken Free limitleri (günde 10 OCR,
+3 PDF okuma, 2 PDF oluşturma) yetmez. Bunun için **ayrı bir test APK'sı** üretilir:
+
+```bash
+flutter build apk --release --dart-define=METINCEP_TEST_BUILD=true
+```
+
+GitHub Actions bunu her derlemede otomatik yapar. **Artifacts → MetinCep-APK** içinde
+iki dosya bulunur:
+
+| Dosya | Ne işe yarar |
+|---|---|
+| `MetinCep-release.apk` | **Mağaza sürümü.** Free limitleri geçerli, Mock Pro yok |
+| `MetinCep-TEST-sinirsiz.apk` | **Yalnızca geliştirici testi.** Limit yok, açılışta Pro. Mağazaya yüklenmez |
+
+Test APK'sı karıştırılamaz: her ekranın sağ üst köşesinde kırmızı **TEST** şeridi vardır.
+
+Güvenlik tarafı: `isTestBuild` bir **derleme zamanı sabitidir**
+(`bool.fromEnvironment('METINCEP_TEST_BUILD')`) ve tanım verilmezse `false`'tur,
+yani mağaza derlemesinde ilgili kod ağaçtan atılır. `tool/verify_release_guards.sh`
+her derlemede üç şeyi doğrular: sabitin varsayılan değeri verilmemiş olduğunu,
+Mock Pro izninin yalnızca `kDebugMode || isTestBuild` ile açıldığını ve **mağaza
+derleme adımının bu bayrağı geçmediğini**.
 
 ### Mock Pro (yalnızca geliştirme)
 
@@ -600,7 +642,8 @@ Aynı adımlar GitHub Actions'ta her derlemede otomatik çalışır ve iş akı�
 | `test/ocr/ocr_pipeline_test.dart` | Ham/düzeltilmiş metnin ayrı tutulması, tablo hücrelerinin metinle tutarlılığı, düşük güvende ham metnin korunması, çizgi ipucunun güveni yükseltmesi, tablo bulunamadığında metnin kaybolmaması |
 | `test/ocr/image_preprocessor_test.dart` | Eğiklik tahmini (düz, +3°, −2°), gri tonlama, büyük görüntünün küçültülmesi, bozuk dosyada çökmeme, basılı modda dokunulmaması, ikili ikinci geçişin siyah-beyaz üretmesi |
 | `test/ocr/image_decoding_test.dart` | Bozuk, boş, olmayan ve fotoğraf olmayan dosyalarda güvenli çözme: istisna atılmaz, `null` döner (gerileme testi) |
-| `test/pdf/pdf_export_service_test.dart` | Geçerli PDF üretimi, gömülü Türkçe yazı tipi, uzun metin/tablonun sayfalara bölünmesi, geniş tabloda yatay sayfa, dikey/yatay fotoğraf, çoklu fotoğraf sayfa sayısı, boş içerikte hata, **metin/tablo PDF'inde gömülü fotoğraf bulunmaması, fotoğraf PDF'inde bulunması** |
+| `test/pdf/pdf_export_service_test.dart` | Geçerli PDF üretimi, gömülü Türkçe yazı tipi, uzun metin/tablonun sayfalara bölünmesi, geniş tabloda yatay sayfa, dikey/yatay fotoğraf, çoklu fotoğraf sayfa sayısı, boş içerikte hata, **metin/tablo PDF'inde gömülü fotoğraf bulunmaması, fotoğraf PDF'inde bulunması**, aranabilir PDF'te ikisinin birden bulunması, metnin saydamlık durumuyla görünmez çizilmesi, fotoğrafın sayfayı kenardan kenara kaplaması |
+| `test/helpers/pdf_inspect.dart` | PDF içerik akışlarını açıp (zlib) çizim komutlarını doğrulayan test yardımcısı |
 | `test/monetization/pdf_export_quota_test.dart` | Free 2/gün PDF çıktısı, kotaların birbirini etkilememesi, başarısız işlemde kota harcanmaması, gün dönümünde yenilenme, Pro'da sınırsızlık, eski JSON ile geriye uyumluluk |
 | `test/widget/pro_widget_test.dart` | Ana ekran Pro kartı, Ayarlar Free/Pro, limit penceresi (İptal / Pro'yu İncele), Pro ekranı "Yakında", Mock Pro anahtarı |
 
