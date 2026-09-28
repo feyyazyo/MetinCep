@@ -67,6 +67,25 @@ jobs:
         id: guards
         run: bash tool/verify_release_guards.sh build/app/outputs/flutter-apk/app-release.apk
 
+      # MAĞAZA APK'sı burada ayrılır. Sonraki adım aynı çıktı yolunu ezdiği için
+      # bu kopyalama, test APK'sının yanlışlıkla mağaza APK'sı sanılmasını önler.
+      - name: Mağaza APK'sını ayır
+        id: store
+        run: |
+          mkdir -p build/dagitim
+          cp build/app/outputs/flutter-apk/app-release.apk \
+             build/dagitim/MetinCep-release.apk
+
+      # SINIRSIZ TEST APK'sı: yalnızca geliştiricinin kendi denemeleri için.
+      # Free limitleri uygulanmaz, her ekranda kırmızı "TEST" şeridi görünür.
+      # Bu APK MAĞAZAYA YÜKLENMEZ.
+      - name: Test APK'sı (sınırsız — yalnızca geliştirici)
+        id: testapk
+        run: |
+          flutter build apk --release --dart-define=METINCEP_TEST_BUILD=true
+          cp build/app/outputs/flutter-apk/app-release.apk \
+             build/dagitim/MetinCep-TEST-sinirsiz.apk
+
       # Aşağıdaki adımlar rapor/teşhis içindir; hata gizlemezler.
 
       - name: Debug APK oluştur (yalnızca release derlemesi kırıldıysa)
@@ -76,7 +95,9 @@ jobs:
 
       - name: APK boyutlarını göster
         if: always()
-        run: ls -lh build/app/outputs/flutter-apk/*.apk || echo "APK üretilmedi"
+        run: |
+          ls -lh build/dagitim/*.apk 2>/dev/null || echo "Dağıtım APK'sı üretilmedi"
+          ls -lh build/app/outputs/flutter-apk/app-debug.apk 2>/dev/null || true
 
       - name: APK dosyalarını yükle
         if: always()
@@ -84,7 +105,8 @@ jobs:
         with:
           name: MetinCep-APK
           path: |
-            build/app/outputs/flutter-apk/app-release.apk
+            build/dagitim/MetinCep-release.apk
+            build/dagitim/MetinCep-TEST-sinirsiz.apk
             build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: warn
 
@@ -119,7 +141,10 @@ jobs:
             echo "| Release güvenlik doğrulaması | $(mark "$R_GUARDS") |"
             echo
             if [ "$R_RELEASE" = "success" ]; then
-              echo "Release APK: **Artifacts → MetinCep-APK → app-release.apk**"
+              echo "**Artifacts → MetinCep-APK** içinde iki APK var:"
+              echo "- \`MetinCep-release.apk\` → MAĞAZA sürümü (Free limitleri geçerli)"
+              echo "- \`MetinCep-TEST-sinirsiz.apk\` → yalnızca geliştirici testi için,"
+              echo "  limitsiz, her ekranda kırmızı TEST şeridi var. Mağazaya YÜKLENMEZ." 
             else
               echo "Release APK üretilemedi (veya önceki bir kapı kırıldığı için sıra gelmedi)."
               echo "ATLANDI yazan adımlar çalışmadı; ilk FAIL adımının günlüğüne bakın."
