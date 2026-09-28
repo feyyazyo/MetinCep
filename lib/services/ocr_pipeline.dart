@@ -14,6 +14,7 @@ class OcrPipelineResult {
     this.normalizationCount = 0,
     this.changes = const [],
     this.tableNearMiss = false,
+    this.words = const [],
   });
 
   static const OcrPipelineResult empty = OcrPipelineResult(rawText: '', text: '');
@@ -30,6 +31,11 @@ class OcrPipelineResult {
   final int normalizationCount;
 
   final List<NormalizationChange> changes;
+
+  /// Karakter düzeltmesinden geçmiş kelimeler (koordinatlarıyla birlikte).
+  /// Aranabilir PDF'teki görünmez metin katmanı bunlardan kurulur; böylece
+  /// kopyalanan yazı, kullanıcının ekranda gördüğü metinle birebir aynı olur.
+  final List<OcrWord> words;
 
   /// Yerleşim tabloya benziyordu ama güven eşiğini geçemedi. Kullanıcıya
   /// "tablo algılanamadı, metin olarak gösteriliyor" demek için kullanılır;
@@ -109,6 +115,10 @@ class OcrPipeline {
       normalizationCount: changes.length,
       changes: changes,
       tableNearMiss: detection.isNearMiss,
+      words: normalizedBlocks
+          .expand((block) => block.lines)
+          .expand((line) => line.words)
+          .toList(growable: false),
     );
   }
 }

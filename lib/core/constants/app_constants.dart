@@ -39,4 +39,22 @@ class AppConstants {
 
   /// Bu kadar veya daha fazla kolonlu tablolar yatay (landscape) sayfaya basılır.
   static const int pdfTableLandscapeColumnCount = 5;
+
+  /// **Sınırsız test derlemesi.** Yalnızca geliştiricinin kendi cihazında
+  /// denemesi içindir.
+  ///
+  /// Derleme zamanı sabitidir; tanımlanmazsa **false**'tur:
+  /// ```
+  /// flutter build apk --release --dart-define=METINCEP_TEST_BUILD=true
+  /// ```
+  /// Mağazaya gidecek derlemede bu tanım VERİLMEZ, dolayısıyla kod ağaçtan
+  /// atılır ve kullanıcı hiçbir şekilde ücretsiz Pro alamaz.
+  /// `tool/verify_release_guards.sh` bunu her derlemede doğrular.
+  static const bool isTestBuild = bool.fromEnvironment('METINCEP_TEST_BUILD');
+
+  /// Aranabilir PDF'teki görünmez metnin yazı boyu sınırları (punto).
+  /// Çok küçük kutularda metin seçilemez hâle gelmesin, çok büyük kutularda
+  /// da sayfa dışına taşmasın diye sınırlanır.
+  static const double searchableMinFontSize = 2;
+  static const double searchableMaxFontSize = 72;
 }

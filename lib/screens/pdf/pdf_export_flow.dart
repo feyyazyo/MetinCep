@@ -6,6 +6,7 @@ import '../../core/app_scope.dart';
 import '../../core/errors/app_exception.dart';
 import '../../core/utils/ui_helpers.dart';
 import '../../models/ocr_table.dart';
+import '../../models/searchable_page.dart';
 import '../../services/pdf_export_service.dart';
 import '../../services/share_service.dart';
 import '../pro/access_gate.dart';
@@ -50,6 +51,25 @@ class PdfExportFlow {
       context,
       fileName: PdfExportService.suggestedFileName(title),
       build: () => service.buildTablePdf(title: title, table: table),
+    );
+  }
+
+  /// **Aranabilir PDF:** fotoğraf olduğu gibi kalır, üzerine görünmez ama
+  /// seçilebilir metin katmanı eklenir.
+  static Future<void> exportSearchable(
+    BuildContext context, {
+    required String title,
+    required List<SearchablePage> pages,
+  }) {
+    if (pages.isEmpty) {
+      showAppSnackBar(context, ErrorMessages.pdfEmptyContent);
+      return Future<void>.value();
+    }
+    final service = AppScope.of(context).pdfExport;
+    return _run(
+      context,
+      fileName: PdfExportService.suggestedFileName(title),
+      build: () => service.buildSearchablePdf(pages: pages, title: title),
     );
   }
 

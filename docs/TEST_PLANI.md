@@ -182,13 +182,13 @@ Tamamen çevrimdışıdır. Yazı tipi uygulamanın içinde gömülüdür.
 
 | # | Test | Adımlar | Beklenen | Sonuç |
 |---|---|---|---|---|
-| O1 | Metin → PDF | Herhangi bir OCR sonucu → **Metni PDF Yap** → Cihaza kaydet | PDF oluşur; açıldığında başlık + metin görünür | |
+| O1 | Metin → PDF | Herhangi bir OCR sonucu → **PDF Yap** → "Metin olarak" → Cihaza kaydet | PDF oluşur; açıldığında başlık + metin görünür | |
 | O2 | Türkçe karakter | O1'in PDF'ini aç | `ş ğ İ ı Ç Ü Ö` **doğru** görünür (kutu/soru işareti yok) | |
 | O3 | Uzun metin sayfalama | Hazırlık 11 → PDF | Metin birden fazla sayfaya bölünür; **taşma ve boş sayfa yok**; sağ altta sayfa numarası | |
 | O4 | Paylaş | O1 → **Paylaş** | WhatsApp/E-posta'ya PDF olarak gider, karşı taraf açabilir | |
-| O5 | Boş metin | Metni tamamen sil → Metni PDF Yap | Anlaşılır hata; boş PDF oluşmaz | |
-| O6 | Tablo → PDF | Hazırlık 9 → Metni PDF Yap → **Tablo olarak** | Gerçek tablo: satır/kolon **kenarlıkları** görünür, başlık satırı gri | |
-| O7 | Aynı belgeyi metin olarak | Hazırlık 9 → Metni PDF Yap → **Metin olarak** | Tablo yerine düz metin basılır (seçim çalışıyor) | |
+| O5 | Boş metin | Metni tamamen sil → PDF Yap | Anlaşılır hata; boş PDF oluşmaz | |
+| O6 | Tablo → PDF | Hazırlık 9 → PDF Yap → **Tablo olarak** | Gerçek tablo: satır/kolon **kenarlıkları** görünür, başlık satırı gri | |
+| O7 | Aynı belgeyi metin olarak | Hazırlık 9 → PDF Yap → **Metin olarak** | Tablo yerine düz metin basılır (seçim çalışıyor) | |
 | O8 | Geniş tablo → PDF | Hazırlık 10 → Tablo olarak | Sayfa **yatay** (landscape) basılır, kolonlar sığar | |
 | O9 | Uzun tablo → PDF | 40+ satırlık tablo | Birden fazla sayfa; **başlık satırı her sayfada tekrarlanır** | |
 | O10 | Fotoğraf → PDF | Ana ekran → **Fotoğrafı PDF Yap** → 1 dikey fotoğraf | Tek sayfalık PDF, sayfa dikey, fotoğraf **oranı bozulmaz** | |
@@ -201,6 +201,12 @@ Tamamen çevrimdışıdır. Yazı tipi uygulamanın içinde gömülüdür.
 | O17 | Uçak modu | O1, O6, O12'yi internetsiz yap | Hepsi çalışır (tam çevrimdışı) | |
 | O18 | İşlem sırasında geri tuşu | PDF oluşturulurken geri | Uygulama donmaz/çökmez | |
 | O19 | Fotoğraf seçmeden vazgeç | Fotoğrafı PDF Yap → seçiciyi kapat | Sessizce ana ekrana dönülür, hata yok, hak harcanmaz | |
+| O20 | Aranabilir PDF | Fotoğraf Çek → OCR → **PDF Yap** → "Fotoğraflı (aranabilir)" | PDF'te **fotoğraf görünür**; üstündeki yazı fare/parmakla **seçilebilir ve kopyalanabilir** | |
+| O21 | Aranabilir PDF'te arama | O20'nin PDF'ini bir okuyucuda aç, içindeki bir kelimeyi ara | Kelime **bulunur** ve fotoğraf üzerinde doğru yerde işaretlenir | |
+| O22 | Kopyalanan yazı | O20'de bir kelimeyi kopyalayıp not defterine yapıştır | Ekranda görülen (düzeltilmiş) metnin aynısı gelir; `ME2AR` değil `MEZAR` | |
+| O23 | Kenar boşluğu | O20 ve O10'un PDF'lerini aç | Fotoğraf sayfayı **kenardan kenara** kaplar; çevresinde 2 cm beyaz bant yok | |
+| O24 | Seçim listesi | Sonuç ekranı → PDF Yap | Liste açılır: "Fotoğraflı (aranabilir)" / (tablo varsa) "Tablo olarak" / "Metin olarak"; her birinin altında fotoğrafın konup konmayacağı yazar | |
+| O25 | PDF girdisinde seçenek | PDF Aç ile bir belge işle → PDF Yap | "Fotoğraflı (aranabilir)" seçeneği **çıkmaz** (ortada fotoğraf yok) | |
 
 ## Z. Bu turun düzeltmeleri (gerçek cihaz doğrulaması)
 
@@ -225,9 +231,10 @@ Bu bölüm, gerçek cihaz testinde bulunan üç sorunun gerçekten düzeldiğini
 | # | Test | Beklenen | Sonuç |
 |---|---|---|---|
 | Z7 | Ana ekran → **Fotoğrafı PDF Yap** → 1 fotoğraf | PDF'te **fotoğrafın kendisi** var; metin seçilemez | |
-| Z8 | Fotoğraf Çek → OCR → düzenle → **Metni PDF Yap** → "Metin olarak" | PDF'te **seçilebilir metin** var; fotoğraf **yok**. PDF görüntüleyicide metni işaretleyip kopyalayın | |
-| Z9 | Tablo algılanan belge → **Metni PDF Yap** → "Tablo olarak" | Gerçek tablo (kenarlıklar) + metin seçilebilir; fotoğraf yok | |
-| Z10 | Kapıda "AHMET / 12.05.2026 / 3500 TL" yazısı → OCR → Metni PDF Yap | Üç satır PDF'te kopyalanabilir metin olarak çıkar | |
+| Z8 | Fotoğraf Çek → OCR → düzenle → **PDF Yap** → "Metin olarak" | PDF'te **seçilebilir metin** var; fotoğraf **yok**. PDF görüntüleyicide metni işaretleyip kopyalayın | |
+| Z9 | Tablo algılanan belge → **PDF Yap** → "Tablo olarak" | Gerçek tablo (kenarlıklar) + metin seçilebilir; fotoğraf yok | |
+| Z10 | Kapıda "AHMET / 12.05.2026 / 3500 TL" yazısı → OCR → PDF Yap → "Metin olarak" | Üç satır PDF'te kopyalanabilir metin olarak çıkar | |
+| Z10b | Aynı fotoğraf → PDF Yap → "Fotoğraflı (aranabilir)" | Fotoğraf olduğu gibi görünür, yazı seçilebilir. **El yazısında metin katmanı zayıf olabilir** (PARTIAL) | |
 
 ### Z11–Z16 · El yazısı ve perspektif (PARTIAL — doğruluk garantisi yok)
 
@@ -254,6 +261,10 @@ Amaç "doğru okudu mu" değil; **çökmüyor mu, basılı metni bozmuyor mu, es
 ## P. Free / Pro (debug APK ile)
 
 `flutter run` veya debug APK ile yapılır.
+
+**Limit hiç istemiyorsanız:** `MetinCep-TEST-sinirsiz.apk` kurun (Artifacts içinde).
+Limitler uygulanmaz, açılışta Pro'dur, her ekranda kırmızı TEST şeridi vardır.
+**Limit davranışını test etmek** içinse mağaza APK'sını veya debug derlemeyi kullanın.
 
 **Limitleri hızlı test etme:** Ayarlar → Pro Durumu → sayfanın en altındaki **Geliştirici araçları**:
 - **Free sayaçlarını limite doldur** → günlük OCR, PDF okuma ve PDF oluşturma hakları anında biter. 10 fotoğraf çekmeden P1, P5 ve P16 test edilebilir.
@@ -308,6 +319,9 @@ Bu araçlar yalnızca debug derlemededir; release APK'da bulunmazlar (bkz. R bö
 | R7 | Release APK'da 2 PDF oluştur, 3.'yü dene | "Günlük PDF oluşturma limitin doldu." (limit release'te de geçerli) | |
 | R8 | Release APK'da el yazısı modu + tablo + PDF çıktısı | Hepsi çalışır; hiçbiri geliştirici aracı gerektirmez | |
 | R9 | Release APK'da uçak modu | OCR, tablo, PDF okuma ve PDF oluşturma internetsiz çalışır | |
+| R10 | `MetinCep-release.apk` (mağaza) | Sağ üstte **TEST şeridi YOK**; limitler geçerli; Pro ekranında Mock Pro yok | |
+| R11 | `MetinCep-TEST-sinirsiz.apk` | Sağ üstte kırmızı **TEST** şeridi VAR; limit uyarısı hiç çıkmaz; istediğin kadar OCR/PDF | |
+| R12 | İki APK'yı karıştırma kontrolü | Mağazaya yüklenecek dosyanın adı `MetinCep-release.apk` olduğundan emin ol | |
 
 Otomatik ön kontrol (isteğe bağlı, bilgisayarda):
 

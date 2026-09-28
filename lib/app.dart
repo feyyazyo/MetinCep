@@ -24,6 +24,16 @@ class MetinCepApp extends StatelessWidget {
           locale: const Locale('tr', 'TR'),
           supportedLocales: const [Locale('tr', 'TR'), Locale('en', 'US')],
           localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          // Sınırsız test derlemesi her ekranda işaretlenir: mağaza sürümüyle
+          // karıştırılması imkânsız olsun. Normal derlemede bu kod ağaçtan atılır.
+          builder: AppConstants.isTestBuild
+              ? (context, child) => Banner(
+                    message: 'TEST',
+                    location: BannerLocation.topEnd,
+                    color: const Color(0xFFD32F2F),
+                    child: child ?? const SizedBox.shrink(),
+                  )
+              : null,
           home: const HomeShell(),
         );
       },

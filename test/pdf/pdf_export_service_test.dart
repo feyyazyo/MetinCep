@@ -4,8 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:metincep/core/errors/app_exception.dart';
 import 'package:metincep/models/ocr_table.dart';
+import 'package:metincep/models/searchable_page.dart';
 import 'package:metincep/services/pdf_export_service.dart';
 
+import '../helpers/pdf_inspect.dart';
 import '../helpers/temp_dir.dart';
 import '../helpers/test_font.dart';
 
@@ -280,6 +282,138 @@ void main() {
       expect(asLatin(imagePdf).contains('/XObject'), isTrue);
       expect(asLatin(textPdf).contains('/XObject'), isFalse);
       expect(asLatin(textPdf), contains('/FontFile2'));
+    });
+  });
+
+  group('Aranabilir PDF (fotoğraf + görünmez metin)', () {
+    String writePhoto(String name, {int width = 600, int height = 800}) {
+      final image = img.Image(width: width, height: height);
+      img.fill(image, color: img.ColorRgb8(215, 215, 215));
+      img.fillRect(image, x1: 60, y1: 100, x2: 540, y2: 140,
+          color: img.ColorRgb8(30, 30, 30));
+      final path = '${directory.path}${Platform.pathSeparator}$name';
+      File(path).writeAsBytesSync(img.encodeJpg(image, quality: 85));
+      return path;
+    }
+
+    SearchablePage pageFor(String path) => SearchablePage(
+          imagePath: path,
+          words: const [
+            SearchableWord(
+                text: 'MEZAR', left: 0.10, top: 0.125, right: 0.45, bottom: 0.175),
+            SearchableWord(
+                text: 'TAŞI', left: 0.50, top: 0.125, right: 0.75, bottom: 0.175),
+            SearchableWord(
+                text: '11', left: 0.10, top: 0.300, right: 0.20, bottom: 0.345),
+            SearchableWord(
+                text: 'Adet', left: 0.24, top: 0.300, right: 0.46, bottom: 0.345),
+          ],
+        );
+
+    test('hem fotoğrafı hem gerçek metni içerir', () async {
+      final bytes = await service.buildSearchablePdf(
+        pages: [pageFor(writePhoto('not.jpg'))],
+        title: 'El yazısı not',
+      );
+      final content = asLatin(bytes);
+
+      // Fotoğraf sayfada: /XObject var.
+      expect(content.contains('/XObject'), isTrue, reason: 'fotoğraf konmalı');
+      // Metin de gerçek metin olarak var: gömülü yazı tipi.
+      expect(content, contains('/FontFile2'));
+      expect(countPages(bytes), 1);
+    });
+
+    test('metin görünmez çizilir (saydamlık durumu kullanılır)', () async {
+      final bytes = await service.buildSearchablePdf(
+        pages: [pageFor(writePhoto('gorunmez.jpg'))],
+      );
+      final content = asLatin(bytes);
+      final stream = inflatedStreams(bytes);
+
+      // Saydamlık, grafik durumu (ExtGState) ile verilir.
+      expect(content.contains('/ExtGState'), isTrue);
+      expect(RegExp(r'/[A-Za-z0-9]+ gs').hasMatch(stream), isTrue,
+          reason: 'içerik akışında grafik durumu çağrılmalı');
+      // Metin çizim komutları da bulunmalı.
+      expect(stream.contains('Tj') || stream.contains('TJ'), isTrue);
+    });
+
+    test('fotoğraf sayfayı kenardan kenara kaplar (2 cm boşluk yok)', () async {
+      final bytes = await service.buildSearchablePdf(
+        pages: [pageFor(writePhoto('tam.jpg'))],
+      );
+
+      final widths = imagePlacementWidths(bytes);
+      expect(widths, isNotEmpty, reason: 'görüntü yerleşimi bulunamadı');
+      // Dikey fotoğraf A4'e genişlikten oturur: çizim genişliği = sayfa genişliği.
+      expect(widths.first, closeTo(595.28, 1.0));
+    });
+
+    test('metni olmayan sayfa yine fotoğraf olarak eklenir', () async {
+      final bytes = await service.buildSearchablePdf(
+        pages: [
+          SearchablePage(imagePath: writePhoto('bos.jpg'), words: const []),
+        ],
+      );
+
+      expect(countPages(bytes), 1);
+      expect(asLatin(bytes).contains('/XObject'), isTrue);
+    });
+
+    test('çoklu sayfa sırayla eklenir', () async {
+      final bytes = await service.buildSearchablePdf(
+        pages: [
+          pageFor(writePhoto('bir.jpg')),
+          pageFor(writePhoto('iki.jpg', width: 900, height: 600)),
+        ],
+      );
+
+      expect(countPages(bytes), 2);
+      final text = asLatin(bytes);
+      expect(text, contains(portraitBox));
+      expect(text, contains(landscapeBox));
+    });
+
+    test('sayfa listesi boşsa PDF üretilmez', () async {
+      await expectLater(
+        service.buildSearchablePdf(pages: const []),
+        throwsA(isA<AppException>()),
+      );
+    });
+
+    test('okunamayan fotoğrafta anlaşılır hata verir', () async {
+      final broken = '${directory.path}${Platform.pathSeparator}bozuk2.jpg';
+      File(broken).writeAsBytesSync(const [4, 4, 4]);
+
+      await expectLater(
+        service.buildSearchablePdf(
+          pages: [SearchablePage(imagePath: broken, words: const [])],
+        ),
+        throwsA(
+          isA<AppException>().having(
+            (error) => error.message,
+            'mesaj',
+            ErrorMessages.pdfImageReadFailed,
+          ),
+        ),
+      );
+    });
+  });
+
+  group('Fotoğraf PDF kenar boşluğu', () {
+    test('sade fotoğraf PDF\'i de kenardan kenara kaplar', () async {
+      final image = img.Image(width: 600, height: 800);
+      img.fill(image, color: img.ColorRgb8(180, 180, 180));
+      final path = '${directory.path}${Platform.pathSeparator}kenar.jpg';
+      File(path).writeAsBytesSync(img.encodeJpg(image, quality: 85));
+
+      final bytes = await service.buildImagesPdf(imagePaths: [path]);
+      final widths = imagePlacementWidths(bytes);
+
+      expect(widths, isNotEmpty);
+      // 2 cm boşlukla bu değer 481.9 olurdu.
+      expect(widths.first, closeTo(595.28, 1.0));
     });
   });
 }

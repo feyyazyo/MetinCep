@@ -6,11 +6,13 @@ import 'package:path_provider/path_provider.dart';
 
 import '../core/errors/app_exception.dart';
 import '../core/utils/cancellation_token.dart';
+import '../core/utils/image_decoding.dart';
 import '../core/utils/table_line_finder.dart';
 import '../core/utils/text_layout_formatter.dart';
 import '../models/extraction_models.dart';
 import '../models/ocr_mode.dart';
 import '../models/ocr_table.dart';
+import '../models/searchable_page.dart';
 import '../models/table_grid_lines.dart';
 import 'image_preprocessor.dart';
 import 'ocr_pipeline.dart';
@@ -79,6 +81,7 @@ class ExtractionService {
     final sections = <String>[];
     final rawSections = <String>[];
     final tables = <OcrTable>[];
+    final searchablePages = <SearchablePage>[];
     var normalizationCount = 0;
     var tableNearMiss = false;
 
@@ -140,6 +143,17 @@ class ExtractionService {
         cancellationToken.throwIfCancelled();
 
         final processed = _pipeline.process(page, gridLines: gridLines);
+
+        // Aranabilir PDF için: fotoğrafın ÖZGÜN hâli + normalize kelimeler.
+        final searchable = _buildSearchablePage(
+          originalPath: paths[index],
+          recognizedPath: recognizedPath,
+          words: processed.words,
+        );
+        if (searchable != null) {
+          searchablePages.add(searchable);
+        }
+
         sections.add(processed.text);
         rawSections.add(processed.rawText);
         normalizationCount += processed.normalizationCount;
@@ -178,7 +192,58 @@ class ExtractionService {
       tables: tables,
       normalizationCount: normalizationCount,
       tableNearMiss: tableNearMiss && tables.isEmpty,
+      searchablePages: searchablePages,
     );
+  }
+
+  /// Kelime kutularını 0..1 aralığına normalize ederek aranabilir sayfa kurar.
+  ///
+  /// Ölçek, OCR'ın gerçekten baktığı görüntüden (ön işlemeden geçtiyse ondan)
+  /// alınır; sayfada ise **özgün fotoğraf** gösterilir. El yazısı modunda
+  /// perspektif düzeltme çalıştıysa metin katmanı birkaç piksel kayabilir —
+  /// metin görünmez olduğu için bu yalnızca seçim alanını etkiler.
+  static SearchablePage? _buildSearchablePage({
+    required String originalPath,
+    required String recognizedPath,
+    required List<OcrWord> words,
+  }) {
+    if (words.isEmpty) {
+      return null;
+    }
+    final size = readImageSize(recognizedPath);
+    if (size == null || size.width <= 0 || size.height <= 0) {
+      return null;
+    }
+    final width = size.width.toDouble();
+    final height = size.height.toDouble();
+
+    final mapped = <SearchableWord>[];
+    for (final word in words) {
+      final text = word.text.trim();
+      if (text.isEmpty || word.width <= 0 || word.height <= 0) {
+        continue;
+      }
+      final left = (word.left / width).clamp(0.0, 1.0);
+      final top = (word.top / height).clamp(0.0, 1.0);
+      final right = (word.right / width).clamp(0.0, 1.0);
+      final bottom = (word.bottom / height).clamp(0.0, 1.0);
+      if (right <= left || bottom <= top) {
+        continue;
+      }
+      mapped.add(
+        SearchableWord(
+          text: text,
+          left: left,
+          top: top,
+          right: right,
+          bottom: bottom,
+        ),
+      );
+    }
+    if (mapped.isEmpty) {
+      return null;
+    }
+    return SearchablePage(imagePath: originalPath, words: mapped);
   }
 
   /// OCR sonucu zayıf mı (el yazısında ikinci geçişe değer mi).

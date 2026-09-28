@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../core/constants/app_constants.dart';
 import '../core/constants/purchase_products.dart';
 import '../models/subscription_model.dart';
 import 'purchase_service.dart';
@@ -9,16 +10,23 @@ import 'purchase_service.dart';
 /// Ekranlar doğrudan `isPro` kontrolü yapmak yerine [FeatureAccessService] kullanır.
 ///
 /// Mock Pro (geliştirici testi):
-/// - Yalnızca `kDebugMode` derlemelerinde çalışır. `kDebugMode` derleme zamanı sabitidir;
-///   release ve profile derlemelerde false olur ve ilgili kod ağaçtan atılır.
+/// - Yalnızca `kDebugMode` **veya** açıkça işaretlenmiş test derlemesinde
+///   ([AppConstants.isTestBuild]) çalışır. İkisi de derleme zamanı sabitidir;
+///   mağazaya giden release derlemesinde false olur ve ilgili kod ağaçtan atılır.
 /// - Kalıcı değildir (yalnızca bellekte). Uygulama yeniden başlatılınca Free'ye döner;
 ///   uygulama silinip kurulunca Pro korunuyormuş gibi davranmaz.
+/// - Test derlemesinde açılışta zaten etkindir (geliştirici her seferinde
+///   açmak zorunda kalmasın) ve ekranda kırmızı "TEST" şeridi görünür.
 class EntitlementService extends ChangeNotifier {
   EntitlementService({
     required PurchaseService purchases,
     bool allowMockPro = true,
   })  : _purchases = purchases,
-        _mockProAllowed = kDebugMode && allowMockPro;
+        _mockProAllowed =
+            (kDebugMode || AppConstants.isTestBuild) && allowMockPro {
+    // Sınırsız test derlemesinde Pro açılışta etkindir.
+    _mockProEnabled = AppConstants.isTestBuild && _mockProAllowed;
+  }
 
   final PurchaseService _purchases;
   final bool _mockProAllowed;

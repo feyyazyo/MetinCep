@@ -34,3 +34,42 @@ img.Image? decodeImageFileSafely(String path) {
     return null;
   }
 }
+
+/// Görüntünün piksel boyutu.
+class ImageSize {
+  const ImageSize(this.width, this.height);
+
+  final int width;
+  final int height;
+
+  @override
+  String toString() => '${width}x$height';
+}
+
+/// Görüntünün **yalnızca boyutunu** okur: pikseller çözülmez, dosya başlığı
+/// ayrıştırılır. 12 MP bir fotoğrafın tamamını belleğe açmadan en/boy öğrenmek
+/// için kullanılır (aranabilir PDF'te metin katmanını ölçeklemek gerekir).
+ImageSize? readImageSize(String path) {
+  try {
+    final file = File(path);
+    if (!file.existsSync()) {
+      return null;
+    }
+    final bytes = file.readAsBytesSync();
+    if (bytes.length < minimumImageBytes) {
+      return null;
+    }
+    final decoder = img.findDecoderForData(bytes);
+    if (decoder == null) {
+      return null;
+    }
+    final info = decoder.startDecode(bytes);
+    if (info == null || info.width <= 0 || info.height <= 0) {
+      return null;
+    }
+    return ImageSize(info.width, info.height);
+  } catch (error) {
+    debugPrint('Görüntü boyutu okunamadı ($path): $error');
+    return null;
+  }
+}

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:metincep/core/constants/app_constants.dart';
 import 'package:metincep/core/constants/plan_limits.dart';
 import 'package:metincep/core/constants/purchase_products.dart';
 import 'package:metincep/models/document_model.dart';
@@ -278,6 +279,36 @@ void main() {
 
       final restarted = await createSetup();
       expect(restarted.access.isPro, isFalse);
+    });
+  });
+
+  group('Sınırsız test derlemesi (geliştirici APK\'sı)', () {
+    test('bayrak varsayılan olarak KAPALI', () {
+      // Mağazaya giden derlemede --dart-define verilmez; bu sabit false kalmalı.
+      // Açık kalırsa herkes ücretsiz Pro olur.
+      expect(AppConstants.isTestBuild, isFalse);
+    });
+
+    test('bayrak kapalıyken Pro kendiliğinden açılmaz', () {
+      final entitlement = EntitlementService(
+        purchases: const UnavailablePurchaseService(),
+      );
+
+      expect(entitlement.isMockProEnabled, isFalse);
+      expect(entitlement.isPro, isFalse);
+    });
+
+    test('izin verilmeyen derlemede Mock Pro hiç açılamaz', () {
+      final entitlement = EntitlementService(
+        purchases: const UnavailablePurchaseService(),
+        allowMockPro: false,
+      );
+
+      entitlement.setMockPro(true);
+
+      expect(entitlement.isMockProAvailable, isFalse);
+      expect(entitlement.isMockProEnabled, isFalse);
+      expect(entitlement.isPro, isFalse);
     });
   });
 }

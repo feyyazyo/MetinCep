@@ -30,10 +30,39 @@ USAGE="lib/services/usage_tracker.dart"
 MAIN="lib/main.dart"
 
 # 1.1 Mock Pro'ya izin veren TEK alan kDebugMode ile korunmalı.
-if grep -q '_mockProAllowed = kDebugMode && allowMockPro;' "$ENTITLEMENT"; then
-  pass "Mock Pro izni kDebugMode ile korunuyor ($ENTITLEMENT)"
+if grep -q '(kDebugMode || AppConstants.isTestBuild) && allowMockPro' "$ENTITLEMENT"; then
+  pass "Mock Pro izni kDebugMode / işaretli test derlemesi ile korunuyor ($ENTITLEMENT)"
 else
-  err "Mock Pro izninin kDebugMode koruması bulunamadı ($ENTITLEMENT)"
+  err "Mock Pro izninin derleme zamanı koruması bulunamadı ($ENTITLEMENT)"
+fi
+
+# 1.1b Test derlemesi bayrağı VARSAYILAN OLARAK KAPALI olmalı.
+#      bool.fromEnvironment tanımsızken false döner; defaultValue: true yazılırsa
+#      mağaza derlemesi de sınırsız olurdu.
+CONSTANTS="lib/core/constants/app_constants.dart"
+if grep -q "static const bool isTestBuild = bool.fromEnvironment('METINCEP_TEST_BUILD');" "$CONSTANTS"; then
+  pass "Test derlemesi bayrağı varsayılan olarak KAPALI ($CONSTANTS)"
+else
+  err "isTestBuild tanımı beklenen biçimde değil ($CONSTANTS)"
+fi
+if grep -q "METINCEP_TEST_BUILD'," "$CONSTANTS" || grep -q 'defaultValue: true' "$CONSTANTS"; then
+  err "isTestBuild için varsayılan değer verilmiş; mağaza derlemesi sınırsız olabilir"
+else
+  pass "isTestBuild'e varsayılan değer verilmemiş"
+fi
+
+# 1.1c MAĞAZA derlemesi test bayrağını GEÇMEMELİ.
+WORKFLOW=".github/workflows/build-apk.yml"
+if [ -f "$WORKFLOW" ]; then
+  store_line=$(grep -n 'flutter build apk --release' "$WORKFLOW" | grep -v 'METINCEP_TEST_BUILD' || true)
+  tainted=$(grep -n 'flutter build apk --release' "$WORKFLOW" | grep 'METINCEP_TEST_BUILD' || true)
+  if [ -z "$store_line" ]; then
+    err "İş akışında test bayrağı OLMAYAN bir release derlemesi yok ($WORKFLOW)"
+  elif [ -z "$tainted" ]; then
+    pass "Mağaza derlemesi test bayrağı geçmiyor (test APK'sı ayrı adımda)"
+  else
+    pass "Mağaza derlemesi ayrı; test APK'sı yalnızca işaretli adımda üretiliyor"
+  fi
 fi
 
 # 1.2 Mock Pro durumu okunurken de izin kontrol edilmeli (izin yoksa her zaman false).
@@ -131,6 +160,16 @@ Mock Pro
 Bugünkü Free sayaçlarını sıfırla
 Free sayaçlarını limite doldur
 MARKERS
+
+      # Mağaza APK'sında "TEST" şeridi OLMAMALI. (Test APK'sında olması normaldir.)
+      case "$APK" in
+        *TEST*) warn "Bu bir TEST APK'sı; sınırsız olması beklenir" ;;
+        *)
+          if grep -aqF 'METINCEP_TEST_BUILD' "$workdir"/lib/*/libapp.so 2>/dev/null; then
+            warn "Derlenmiş kodda test bayrağı adı görünüyor (sabit adı; tek başına açık olduğu anlamına gelmez)"
+          fi
+          ;;
+      esac
 
       if [ "$found" -eq 0 ]; then
         pass "Geliştirici arayüzü metinleri release kodunda yok (ağaç budama çalışmış)"

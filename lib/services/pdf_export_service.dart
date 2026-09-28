@@ -15,6 +15,7 @@ import '../core/utils/date_formatter.dart';
 import '../core/utils/image_decoding.dart';
 import '../core/utils/file_name_utils.dart';
 import '../models/ocr_table.dart';
+import '../models/searchable_page.dart';
 
 /// PDF için yazı tipini yükleyen fonksiyon. Testlerde dosyadan okunur.
 typedef PdfFontLoader = Future<ByteData> Function();
@@ -148,6 +149,10 @@ class PdfExportService {
       document.addPage(
         pw.Page(
           pageFormat: isLandscape ? PdfPageFormat.a4.landscape : PdfPageFormat.a4,
+          // PdfPageFormat.a4 varsayılan olarak her kenarda 2 cm boşluk bırakır.
+          // Fotoğraf sayfasında bu boşluk fotoğrafı gereksiz küçültür
+          // (sayfa genişliğinin yalnızca %81'i) ve baskıda kayıp olur.
+          margin: pw.EdgeInsets.zero,
           build: (context) => pw.Center(
             child: pw.Image(provider, fit: pw.BoxFit.contain),
           ),
@@ -160,6 +165,126 @@ class PdfExportService {
       throw const AppException(ErrorMessages.pdfImageReadFailed);
     }
     return document.save();
+  }
+
+  /// **Aranabilir PDF:** fotoğrafın kendisi sayfada kalır, üzerine görünmez
+  /// ama seçilebilir/kopyalanabilir bir metin katmanı yerleştirilir.
+  ///
+  /// Tarayıcıların ürettiği "searchable PDF" ile aynı fikir: belge olduğu gibi
+  /// görünür, içeriği aranabilir olur. Metin `Opacity(0)` ile çizilir; PDF
+  /// içinde gerçek metin nesnesi olarak durur, ekranda görünmez.
+  ///
+  /// Metni olmayan sayfalar yine fotoğraf olarak eklenir: veri kaybolmaz.
+  Future<PdfBytes> buildSearchablePdf({
+    required List<SearchablePage> pages,
+    String title = AppConstants.appName,
+  }) async {
+    if (pages.isEmpty) {
+      throw const AppException(ErrorMessages.pdfEmptyContent);
+    }
+
+    final theme = await _theme();
+    final document = pw.Document(theme: theme, title: _documentTitle(title));
+    var added = 0;
+
+    for (final page in pages) {
+      final prepared = await compute(prepareImageForPdf, page.imagePath);
+      if (prepared == null) {
+        debugPrint('Aranabilir PDF için fotoğraf hazırlanamadı: ${page.imagePath}');
+        continue;
+      }
+      final provider = pw.MemoryImage(prepared.bytes);
+      final isLandscape = prepared.width > prepared.height;
+      final format = isLandscape
+          ? PdfPageFormat.a4.landscape
+          : PdfPageFormat.a4;
+
+      // Fotoğrafın sayfadaki gerçek yerleşimi elle hesaplanır: görünmez metin
+      // tam olarak fotoğrafın üstüne denk gelmeli.
+      final scale = math.min(
+        format.width / prepared.width,
+        format.height / prepared.height,
+      );
+      final drawWidth = prepared.width * scale;
+      final drawHeight = prepared.height * scale;
+      final offsetX = (format.width - drawWidth) / 2;
+      final offsetY = (format.height - drawHeight) / 2;
+
+      document.addPage(
+        pw.Page(
+          pageFormat: format,
+          margin: pw.EdgeInsets.zero,
+          theme: theme,
+          build: (context) => pw.Stack(
+            fit: pw.StackFit.expand,
+            children: [
+              pw.Positioned(
+                left: offsetX,
+                top: offsetY,
+                child: pw.SizedBox(
+                  width: drawWidth,
+                  height: drawHeight,
+                  child: pw.Image(provider, fit: pw.BoxFit.fill),
+                ),
+              ),
+              // TEK bir saydamlık katmanı: her kelimeyi ayrı ayrı sarmak hem
+              // yavaştır hem de dart_pdf'te Opacity çocuğunu kendi kutusu
+              // kadar ötelediği için konum kayması yaratır. Tam sayfa kaplayan
+              // tek katmanda kutu başlangıcı (0,0) olduğundan kayma olmaz.
+              pw.Opacity(
+                opacity: 0,
+                child: pw.Stack(
+                  fit: pw.StackFit.expand,
+                  children: _invisibleWords(
+                    page: page,
+                    offsetX: offsetX,
+                    offsetY: offsetY,
+                    drawWidth: drawWidth,
+                    drawHeight: drawHeight,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      added++;
+    }
+
+    if (added == 0) {
+      throw const AppException(ErrorMessages.pdfImageReadFailed);
+    }
+    return document.save();
+  }
+
+  /// Görünmez metin katmanının parçaları. Yazı boyu kelime kutusunun
+  /// yüksekliğinden türetilir; böylece seçim alanı gerçek yazıyla örtüşür.
+  List<pw.Widget> _invisibleWords({
+    required SearchablePage page,
+    required double offsetX,
+    required double offsetY,
+    required double drawWidth,
+    required double drawHeight,
+  }) {
+    final widgets = <pw.Widget>[];
+    for (final word in page.words) {
+      final height = word.height * drawHeight;
+      final fontSize = (height * 0.85).clamp(
+        AppConstants.searchableMinFontSize,
+        AppConstants.searchableMaxFontSize,
+      );
+      widgets.add(
+        pw.Positioned(
+          left: offsetX + word.left * drawWidth,
+          top: offsetY + word.top * drawHeight,
+          child: pw.Text(
+            word.text,
+            style: pw.TextStyle(fontSize: fontSize),
+          ),
+        ),
+      );
+    }
+    return widgets;
   }
 
   /// PDF'i geçici klasöre yazar (paylaşım için). Yarım dosya bırakmaz.

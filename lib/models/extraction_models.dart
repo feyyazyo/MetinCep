@@ -1,6 +1,7 @@
 import 'document_model.dart';
 import 'ocr_mode.dart';
 import 'ocr_table.dart';
+import 'searchable_page.dart';
 
 /// Metin çıkarma isteği. V2'de yeni kaynak türleri (ör. Word) buraya eklenebilir.
 abstract class ExtractionRequest {
@@ -91,6 +92,7 @@ class ExtractionResult {
     this.tables = const [],
     this.normalizationCount = 0,
     this.tableNearMiss = false,
+    this.searchablePages = const [],
   });
 
   /// Kullanıcıya gösterilen metin (karakter normalizasyonundan geçmiş hali).
@@ -120,6 +122,14 @@ class ExtractionResult {
   /// Yerleşim tabloya benziyordu ama güven eşiğini geçemedi. Metin korunur;
   /// kullanıcıya yalnızca bilgi verilir ("tablo algılanamadı").
   final bool tableNearMiss;
+
+  /// Aranabilir PDF üretilebilecek sayfalar (fotoğraf + görünmez metin).
+  /// Yalnızca fotoğraf akışında dolar; PDF girdisinde boştur.
+  final List<SearchablePage> searchablePages;
+
+  /// Fotoğrafın kendisi korunarak aranabilir PDF üretilebilir mi.
+  bool get canBuildSearchablePdf =>
+      searchablePages.any((page) => page.hasText);
 
   bool get isPartial => sourcePageCount != null && sourcePageCount! > unitCount;
 

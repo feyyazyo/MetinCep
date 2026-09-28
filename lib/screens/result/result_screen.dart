@@ -10,6 +10,7 @@ import '../../core/utils/ui_helpers.dart';
 import '../../models/document_model.dart';
 import '../../models/extraction_models.dart';
 import '../../models/ocr_table.dart';
+import '../../models/searchable_page.dart';
 import '../../services/share_service.dart';
 import '../pdf/pdf_export_flow.dart';
 import 'table_preview_screen.dart';
@@ -526,54 +527,103 @@ class _ResultScreenState extends State<ResultScreen> {
   Future<void> _exportPdf() async {
     final text = _controller.text;
     final table = _table;
-    if (text.trim().isEmpty && table == null) {
+    final extraction = widget.extraction;
+    final searchablePages = extraction?.searchablePages ?? const <SearchablePage>[];
+    final canSearchable = extraction?.canBuildSearchablePdf ?? false;
+
+    if (text.trim().isEmpty && table == null && !canSearchable) {
       showAppSnackBar(context, ErrorMessages.pdfEmptyContent);
       return;
     }
 
-    if (table != null) {
-      final asTable = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('PDF nasıl oluşturulsun?'),
-          content: const Text(
-            'Her iki seçenekte de PDF içine gerçek, seçilebilir metin yazılır; '
-            'fotoğrafın kendisi PDF\'e konmaz.\n\n'
-            'Tablo olarak: algılanan tablo satır ve kolonlarıyla basılır.\n'
-            'Metin olarak: düzenlediğin metin olduğu gibi basılır.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Metin olarak'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Tablo olarak'),
-            ),
-          ],
-        ),
+    var kind = _PdfKind.text;
+    if (canSearchable || table != null) {
+      final chosen = await _askPdfKind(
+        canSearchable: canSearchable,
+        hasTable: table != null,
       );
-      if (asTable == null || !mounted) {
+      if (chosen == null || !mounted) {
         return;
       }
-      if (asTable) {
-        await PdfExportFlow.exportTable(
-          context,
-          title: _titleForFiles(),
-          table: table,
-        );
-        return;
-      }
+      kind = chosen;
     }
 
-    if (!mounted) {
-      return;
+    switch (kind) {
+      case _PdfKind.searchable:
+        await PdfExportFlow.exportSearchable(
+          context,
+          title: _titleForFiles(),
+          pages: searchablePages,
+        );
+      case _PdfKind.table:
+        if (table != null) {
+          await PdfExportFlow.exportTable(
+            context,
+            title: _titleForFiles(),
+            table: table,
+          );
+        }
+      case _PdfKind.text:
+        await PdfExportFlow.exportText(
+          context,
+          title: _titleForFiles(),
+          text: text,
+        );
     }
-    await PdfExportFlow.exportText(
-      context,
-      title: _titleForFiles(),
-      text: text,
+  }
+
+  /// PDF türünü sorar. Seçenekler açıkça anlatılır: kullanıcı fotoğrafın
+  /// PDF'e girip girmeyeceğini bilmelidir.
+  Future<_PdfKind?> _askPdfKind({
+    required bool canSearchable,
+    required bool hasTable,
+  }) {
+    return showModalBottomSheet<_PdfKind>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 18, 20, 6),
+              child: Text(
+                'PDF nasıl olsun?',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            if (canSearchable)
+              ListTile(
+                leading: const Icon(Icons.image_search_outlined),
+                title: const Text('Fotoğraflı (aranabilir)'),
+                subtitle: const Text(
+                  'Fotoğraf olduğu gibi kalır; üstündeki yazı seçilebilir ve aranabilir',
+                ),
+                isThreeLine: true,
+                onTap: () => Navigator.of(sheetContext).pop(_PdfKind.searchable),
+              ),
+            if (hasTable)
+              ListTile(
+                leading: const Icon(Icons.table_chart_outlined),
+                title: const Text('Tablo olarak'),
+                subtitle: const Text(
+                  'Algılanan tablo satır ve kolonlarıyla basılır (fotoğraf konmaz)',
+                ),
+                isThreeLine: true,
+                onTap: () => Navigator.of(sheetContext).pop(_PdfKind.table),
+              ),
+            ListTile(
+              leading: const Icon(Icons.text_snippet_outlined),
+              title: const Text('Metin olarak'),
+              subtitle: const Text(
+                'Düzenlediğin metin sade bir sayfaya basılır (fotoğraf konmaz)',
+              ),
+              isThreeLine: true,
+              onTap: () => Navigator.of(sheetContext).pop(_PdfKind.text),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
     );
   }
 
@@ -632,7 +682,7 @@ class _ResultScreenState extends State<ResultScreen> {
               ),
               onPressed: _busy ? null : _exportPdf,
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
-              label: const Text('Metni PDF Yap'),
+              label: const Text('PDF Yap'),
             ),
           ),
           const SizedBox(height: 8),
@@ -871,4 +921,16 @@ class _TitleDialogState extends State<_TitleDialog> {
       ],
     );
   }
+}
+
+/// Sonuç ekranından üretilebilecek PDF türleri.
+enum _PdfKind {
+  /// Fotoğraf + görünmez metin katmanı.
+  searchable,
+
+  /// Yalnızca metin.
+  text,
+
+  /// Algılanan tablo.
+  table,
 }
